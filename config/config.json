@@ -1,0 +1,6 @@
+{
+  "processed_directory": "processed",
+  "logs_directory": "logs",
+  "presets_directory": "presets",
+  "supported_extensions": [".jpg", ".jpeg", ".png", ".webp"]
+}

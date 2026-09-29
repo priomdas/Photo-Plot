@@ -1,0 +1,18 @@
+{
+  "name": "default",
+  "max_width": 2400,
+  "max_height": 2400,
+  "quality": 90,
+  "format": "JPEG",
+  "anchor": "bottom-right",
+  "offset_x": 0.03,
+  "offset_y": 0.03,
+  "logo_opacity": 100,
+  "logo_width_ratio": 0.20,
+  ,"adjustments": {
+    "brightness": 1.0,
+    "contrast": 1.0,
+    "saturation": 1.0,
+    "sharpness": 1.0
+  }
+}
