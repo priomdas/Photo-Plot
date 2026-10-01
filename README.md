@@ -1,6 +1,19 @@
-# PhotoPilot MVP
+# PhotoPilot
 
-PhotoPilot is a beginner-friendly, local-only React + FastAPI photo processor. It applies EXIF orientation correction, optional resizing, reference-image color matching, JPEG/PNG/WebP output, and a logo positioned using relative anchor offsets. Every file is isolated so one bad image does not stop a batch.
+PhotoPilot is a local React + FastAPI photo studio for batch editing, RAW/DNG preset workflows, AI-assisted photo curation, and Facebook Page post composition.
+
+## Features
+
+- Batch photo processing with resizing, quality controls, JPEG/PNG/WebP export, EXIF orientation correction, and logo/watermark placement.
+- Lightroom-style adjustments including exposure, contrast, highlights, shadows, color, clarity, dehaze, vignette, grain, and sharpness.
+- Preset save/load plus Lightroom DNG/XMP/JSON preset import.
+- CPU/GPU device selection with automatic hardware detection.
+- Undo/redo for editing changes.
+- AI curation for duplicate detection, similar-scene grouping, quality ranking, face/blur/exposure analysis, and “Select Best N”.
+- Folder curation through the in-app **Browse Folder** picker, or direct browser file upload.
+- Facebook Post Composer with captions, hashtags, saved hashtag sets, drafts, Page connections, scheduling, publishing history, and upload progress/ETA.
+
+All image processing runs locally. Facebook publishing is the only feature that sends data to Facebook's Graph API.
 
 ## Windows setup
 
@@ -19,7 +32,7 @@ npm install
 
 The easiest option on Windows is to double-click `start_photopilot.bat`. It opens the backend, frontend, and browser automatically. Keep the two opened terminal windows running while using PhotoPilot; close them when finished.
 
-Use two PowerShell windows from `E:\Photo project`:
+Use two PowerShell windows from the project folder:
 
 ```powershell
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload
@@ -28,6 +41,34 @@ npm run dev
 ```
 
 Open http://localhost:5173. Processed files are written to `processed/`, logs to `logs/`, and presets to `presets/`. The API also exposes `/api/progress/{job_id}`, previews, GPU detection (`torch` is optional), and a Windows-only open-folder endpoint.
+
+## Using the main features
+
+### Process photos
+
+1. Add photos from the left upload tray.
+2. Choose adjustments, output settings, and an optional logo.
+3. Click **Process photos**.
+4. When processing finishes, click **Open processed photos in Post Composer** to use the outputs directly without adding them again.
+
+### Curate a folder
+
+1. Click **AI Curate**.
+2. Click **Browse Folder** and select a folder.
+3. Photo previews appear while analysis runs.
+4. Review groups, recommendations, and unique photos.
+5. Select photos and apply them to the workspace.
+
+### Publish to Facebook
+
+1. Open **Post Composer**.
+2. Add processed photos or upload photos directly.
+3. Connect a Facebook Page using a valid Page Access Token or User Access Token.
+4. Write/generate a caption and hashtags.
+5. Choose **Publish Now**, **Schedule**, or **Save Draft**.
+6. During publishing, the composer shows uploaded photo count, percentage, and estimated remaining time.
+
+Facebook tokens are stored only in the local ignored database. A new computer must connect its Facebook Page again.
 
 ## Checks
 
@@ -38,6 +79,10 @@ npm run build
 ```
 
 Optional GPU status: install a matching PyTorch build (`pip install torch`) if your machine supports it. PhotoPilot remains functional on CPU and does not call cloud APIs.
+
+## Local data and GitHub
+
+Generated jobs, processed images, logs, SQLite databases, and sample image folders are intentionally ignored by Git. Do not commit Facebook tokens, personal photos, or local databases. Copy `.env.example` only if environment configuration is added in the future.
 
 ## Reference style image
 

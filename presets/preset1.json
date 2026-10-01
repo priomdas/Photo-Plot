@@ -1,0 +1,31 @@
+{
+  "name": "preset1",
+  "max_width": null,
+  "max_height": null,
+  "quality": 90,
+  "format": "JPEG",
+  "anchor": "bottom-right",
+  "offset_x": 0.03,
+  "offset_y": 0.03,
+  "logo_opacity": 100,
+  "logo_width_ratio": 0.2,
+  "logo_position_x": null,
+  "logo_position_y": null,
+  "adjustments": {
+    "exposure": 1.5,
+    "contrast": -34.0,
+    "highlights": -79.0,
+    "shadows": -38.0,
+    "whites": 37.0,
+    "blacks": 36.0,
+    "temperature": 0.0,
+    "tint": 0.0,
+    "vibrance": 17.0,
+    "saturation": 10.0,
+    "clarity": 0.0,
+    "dehaze": 0.0,
+    "vignette": 0.0,
+    "grain": 95.0,
+    "sharpness": 0.0
+  }
+}

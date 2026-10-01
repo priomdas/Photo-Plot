@@ -1,0 +1,15 @@
+{
+  "phash_threshold": 8,
+  "dhash_threshold": 10,
+  "embedding_similarity_threshold": 0.88,
+  "near_duplicate_embedding_threshold": 0.96,
+  "embedding_batch_size": 16,
+  "prefer_gpu": true,
+  "weights": {
+    "sharpness": 0.35,
+    "face_quality": 0.25,
+    "exposure": 0.2,
+    "resolution": 0.1,
+    "noise": 0.1
+  }
+}

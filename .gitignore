@@ -10,6 +10,27 @@ processed/*
 !processed/.gitkeep
 logs/*
 !logs/.gitkeep
+samples/input/*
+!samples/input/.gitkeep
+samples/output/*
+!samples/output/.gitkeep
+
+# Local databases, logs, exports, and image assets
+*.db
+*.db-shm
+*.db-wal
+*.log
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.heic
+*.heif
+*.dng
+*.cr2
+*.cr3
+*.nef
+*.arw
 
 *.env
 .env.*
