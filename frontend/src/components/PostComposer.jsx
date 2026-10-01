@@ -826,7 +826,30 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                         <div className="pc-publish-progress__bar">
                           <div style={{ width: `${publishProgress.percent}%` }} />
                         </div>
-                        <span>{publishProgress.percent}% uploaded · {formatEta(publishProgress.eta_seconds)} · Please keep this window open</span>
+                        <div className="pc-publish-progress__summary">
+                          <span>{publishProgress.percent}% uploaded · {formatEta(publishProgress.eta_seconds)}</span>
+                          <span>{publishProgress.completed}/{publishProgress.total} photo uploads</span>
+                        </div>
+                        {publishProgress.pages && (
+                          <div className="pc-page-progress-list">
+                            {Object.values(publishProgress.pages).map((page) => (
+                              <div className="pc-page-progress" key={page.page_id}>
+                                <div className="pc-page-progress__head">
+                                  <span>{page.page_name}</span>
+                                  <span className={`pc-page-progress__status pc-page-progress__status--${page.status}`}>
+                                    {page.status === "failed" ? "Failed" : page.status === "complete" || page.status === "published" || page.status === "scheduled" ? "Complete" : `${page.percent}%`}
+                                  </span>
+                                </div>
+                                <div className="pc-page-progress__bar">
+                                  <div className={`pc-page-progress__fill pc-page-progress__fill--${page.status}`} style={{ width: `${page.percent}%` }} />
+                                </div>
+                                <small>
+                                  {page.status === "failed" ? page.error : `${page.completed}/${page.total} photos`}
+                                </small>
+                              </div>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     )}
                   </section>

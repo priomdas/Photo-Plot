@@ -59,6 +59,7 @@ export function ControlPanel({
   preset,
   onUpdate,
   onAdjust,
+  onApplyToAll,
   logo,
   onLogo,
   presets,
@@ -110,6 +111,8 @@ export function ControlPanel({
       sharpness: 25,
     });
   };
+
+  const applyGroup = (keys) => onApplyToAll?.(keys);
 
   return (
     <div className="panel">
@@ -300,13 +303,10 @@ export function ControlPanel({
           onChange={(v) => onAdjust("blacks", v)}
           format={(v) => `${v > 0 ? "+" : ""}${v}`}
         />
-        <button
-          className="link"
-          style={{ alignSelf: "flex-start" }}
-          onClick={() => resetAdjGroup(["exposure", "contrast", "highlights", "shadows", "whites", "blacks"])}
-        >
-          Reset Light
-        </button>
+        <div className="section__actions">
+          <button className="btn btn--ghost btn--xs" onClick={() => applyGroup(["exposure", "contrast", "highlights", "shadows", "whites", "blacks"])}>Apply to all</button>
+          <button className="link" onClick={() => resetAdjGroup(["exposure", "contrast", "highlights", "shadows", "whites", "blacks"])}>Reset Light</button>
+        </div>
       </Section>
 
       {/* Color Panel */}
@@ -347,13 +347,10 @@ export function ControlPanel({
           onChange={(v) => onAdjust("saturation", v)}
           format={(v) => `${v > 0 ? "+" : ""}${v}`}
         />
-        <button
-          className="link"
-          style={{ alignSelf: "flex-start" }}
-          onClick={() => resetAdjGroup(["temperature", "tint", "vibrance", "saturation"])}
-        >
-          Reset Color
-        </button>
+        <div className="section__actions">
+          <button className="btn btn--ghost btn--xs" onClick={() => applyGroup(["temperature", "tint", "vibrance", "saturation"])}>Apply to all</button>
+          <button className="link" onClick={() => resetAdjGroup(["temperature", "tint", "vibrance", "saturation"])}>Reset Color</button>
+        </div>
       </Section>
 
       {/* Effects / Presence */}
@@ -394,13 +391,10 @@ export function ControlPanel({
           onChange={(v) => onAdjust("grain", v)}
           format={(v) => `${v}`}
         />
-        <button
-          className="link"
-          style={{ alignSelf: "flex-start" }}
-          onClick={() => resetAdjGroup(["clarity", "dehaze", "vignette", "grain"])}
-        >
-          Reset Effects
-        </button>
+        <div className="section__actions">
+          <button className="btn btn--ghost btn--xs" onClick={() => applyGroup(["clarity", "dehaze", "vignette", "grain"])}>Apply to all</button>
+          <button className="link" onClick={() => resetAdjGroup(["clarity", "dehaze", "vignette", "grain"])}>Reset Effects</button>
+        </div>
       </Section>
 
       {/* Detail / Sharpness */}
@@ -414,13 +408,10 @@ export function ControlPanel({
           onChange={(v) => onAdjust("sharpness", v)}
           format={(v) => `${v}`}
         />
-        <button
-          className="link"
-          style={{ alignSelf: "flex-start" }}
-          onClick={() => resetAdjGroup(["sharpness"])}
-        >
-          Reset Detail
-        </button>
+        <div className="section__actions">
+          <button className="btn btn--ghost btn--xs" onClick={() => applyGroup(["sharpness"])}>Apply to all</button>
+          <button className="link" onClick={() => resetAdjGroup(["sharpness"])}>Reset Detail</button>
+        </div>
       </Section>
 
       {/* Logo / Watermark Section */}

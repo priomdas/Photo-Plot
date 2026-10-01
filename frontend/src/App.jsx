@@ -149,6 +149,23 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
     });
   };
 
+  const applyAdjustmentGroupToAll = (keys) => {
+    setFilePresets((prev) => {
+      if (!prev.length || !prev[selected]) return prev;
+      const source = prev[selected].adjustments || {};
+      const next = prev.map((item) => ({
+        ...item,
+        adjustments: {
+          ...(item.adjustments || {}),
+          ...Object.fromEntries(keys.map((key) => [key, source[key]])),
+        },
+      }));
+      pushHistory(next, true);
+      return next;
+    });
+    toasts.success("Adjustment group applied to all photos");
+  };
+
   // Undo action
   const undo = useCallback(() => {
     if (historyIndex > 0) {
@@ -472,6 +489,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
             preset={currentPreset}
             onUpdate={update}
             onAdjust={adjust}
+            onApplyToAll={applyAdjustmentGroupToAll}
             logo={logo}
             onLogo={setLogo}
             presets={presets}

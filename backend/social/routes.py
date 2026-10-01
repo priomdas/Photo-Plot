@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import logging
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -317,23 +318,33 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
             full_caption += "\n\n" + " ".join(req.hashtags)
 
         total_work = len(req.photo_paths) * len(pages)
-        completed_work = 0
-        results = []
-        errors = []
+        job["pages"] = {
+            page_id: {
+                "page_id": page_id,
+                "page_name": page_data["page_name"],
+                "completed": 0,
+                "total": len(req.photo_paths),
+                "percent": 0,
+                "status": "uploading",
+            }
+            for page_id, page_data in pages
+            if page_data
+        }
 
-        def on_progress(completed: int, page_total: int) -> None:
-            job["completed"] = completed
-            job["total"] = total_work
-            job["percent"] = round(completed / total_work * 100) if total_work else 100
-            elapsed = time.time() - job["started_at"]
-            job["elapsed_seconds"] = round(elapsed, 1)
-            job["eta_seconds"] = round(elapsed / completed * (total_work - completed), 1) if completed else None
-
-        for page_id, page_data in pages:
-            assert page_data is not None
-
+        def publish_for_page(page_id: str, page_data: dict[str, Any]) -> tuple[str, dict[str, Any] | None, str, str]:
             def page_progress(completed: int, total: int) -> None:
-                on_progress(completed_work + completed, total)
+                page_job = job["pages"][page_id]
+                page_job["completed"] = completed
+                page_job["percent"] = round(completed / total * 100) if total else 100
+                completed_total = sum(item["completed"] for item in job["pages"].values())
+                job["completed"] = completed_total
+                job["total"] = total_work
+                job["percent"] = round(completed_total / total_work * 100) if total_work else 100
+                elapsed = time.time() - job["started_at"]
+                job["elapsed_seconds"] = round(elapsed, 1)
+                job["eta_seconds"] = round(
+                    elapsed / completed_total * (total_work - completed_total), 1
+                ) if completed_total else None
 
             try:
                 if req.scheduled_publish_time > 0:
@@ -357,32 +368,49 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
                     status = "published"
                     if len(req.photo_paths) == 1:
                         page_progress(1, 1)
-
-                record = db.record_published_post(
-                    draft_id=req.draft_id,
-                    fb_post_id=result.get("id", result.get("post_id", "")),
-                    page_id=page_id,
-                    page_name=page_data["page_name"],
-                    caption=req.caption,
-                    hashtags=req.hashtags,
-                    photo_paths=req.photo_paths,
-                    status=status,
-                )
-                results.append({**record, "fb_result": result})
+                job["pages"][page_id]["status"] = status
+                return page_id, result, status, ""
             except FacebookPublishError as exc:
-                errors.append({"page_id": page_id, "page_name": page_data["page_name"], "error": str(exc)})
-                db.record_published_post(
-                    draft_id=req.draft_id,
-                    page_id=page_id,
-                    page_name=page_data["page_name"],
-                    error=str(exc),
-                    caption=req.caption,
-                    hashtags=req.hashtags,
-                    photo_paths=req.photo_paths,
-                    status="failed",
-                )
-            completed_work += len(req.photo_paths)
-            on_progress(completed_work, len(req.photo_paths))
+                job["pages"][page_id]["status"] = "failed"
+                job["pages"][page_id]["error"] = str(exc)
+                page_progress(len(req.photo_paths), len(req.photo_paths))
+                return page_id, None, "failed", str(exc)
+
+        results = []
+        errors = []
+        with ThreadPoolExecutor(max_workers=len(pages)) as executor:
+            futures = {
+                executor.submit(publish_for_page, page_id, page_data): (page_id, page_data)
+                for page_id, page_data in pages
+                if page_data
+            }
+            for future in as_completed(futures):
+                page_id, page_data = futures[future]
+                result_page_id, result, status, error = future.result()
+                if error:
+                    errors.append({"page_id": page_id, "page_name": page_data["page_name"], "error": error})
+                    db.record_published_post(
+                        draft_id=req.draft_id,
+                        page_id=page_id,
+                        page_name=page_data["page_name"],
+                        error=error,
+                        caption=req.caption,
+                        hashtags=req.hashtags,
+                        photo_paths=req.photo_paths,
+                        status="failed",
+                    )
+                else:
+                    record = db.record_published_post(
+                        draft_id=req.draft_id,
+                        fb_post_id=result.get("id", result.get("post_id", "")),
+                        page_id=result_page_id,
+                        page_name=page_data["page_name"],
+                        caption=req.caption,
+                        hashtags=req.hashtags,
+                        photo_paths=req.photo_paths,
+                        status=status,
+                    )
+                    results.append({**record, "fb_result": result})
 
         if not results:
             raise FacebookPublishError("Publishing failed for all selected Pages")
