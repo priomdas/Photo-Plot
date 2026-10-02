@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Icon } from "./Icon";
 
 const ACCEPT =
   ".jpg,.jpeg,.png,.webp,.heic,.heif,.dng,image/jpeg,image/png,image/webp,image/heic,image/heif,image/x-adobe-dng";
@@ -32,6 +33,7 @@ function Thumb({ file, active, index, onSelect, onRemove }) {
 
 export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
   const [dragOver, setDragOver] = useState(false);
+  const [expanded, setExpanded] = useState(true);
   const inputRef = useRef(null);
 
   const addFiles = (list) => {
@@ -41,7 +43,21 @@ export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
 
   return (
     <div className="tray">
-      <div
+      <div className="tray__head">
+        <div>
+          <span className="tray__eyebrow">Workspace</span>
+          <strong>Photo tray</strong>
+        </div>
+        <button
+          className="icon-btn icon-btn--sm"
+          onClick={() => setExpanded((value) => !value)}
+          title={expanded ? "Collapse photo tray" : "Expand photo tray"}
+          aria-label={expanded ? "Collapse photo tray" : "Expand photo tray"}
+        >
+          <Icon name="chevron" size={16} className={expanded ? "icon--rotate-90" : ""} />
+        </button>
+      </div>
+      {expanded && <div
         className={`dropzone ${dragOver ? "dropzone--over" : ""}`}
         onClick={() => inputRef.current?.click()}
         onDragOver={(e) => {
@@ -55,7 +71,7 @@ export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
           addFiles(e.dataTransfer.files);
         }}
       >
-        <div className="dropzone__icon">⬆</div>
+        <div className="dropzone__icon"><Icon name="upload" size={21} /></div>
         <p className="dropzone__title">Drop photos here</p>
         <p className="dropzone__hint">or click to browse · JPG, PNG, WebP, HEIC, RAW/DNG</p>
         <input
@@ -69,9 +85,9 @@ export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
             e.target.value = "";
           }}
         />
-      </div>
+      </div>}
 
-      {files.length > 0 && (
+      {expanded && files.length > 0 && (
         <>
           <div className="tray__meta">
             <span>{files.length} photo{files.length > 1 ? "s" : ""}</span>

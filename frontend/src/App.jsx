@@ -7,6 +7,7 @@ import { CanvasStage } from "./components/CanvasStage";
 import { ControlPanel } from "./components/ControlPanel";
 import { CurationModal } from "./components/CurationModal";
 import { PostComposer } from "./components/PostComposer";
+import { Icon } from "./components/Icon";
 
 const INITIAL_PRESET = {
   name: "default",
@@ -56,6 +57,8 @@ export default function App() {
   const [theme, setTheme] = useState(() => localStorage.getItem("pp-theme") || "dark");
   const [curationOpen, setCurationOpen] = useState(false);
   const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTab, setComposerTab] = useState("compose");
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const toasts = useToasts();
   const pollRef = useRef(null);
 
@@ -300,12 +303,17 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
 
   const isGpuActive = deviceMode === "gpu" || (deviceMode === "auto" && gpu?.available);
   const currentPreset = filePresets[selected] || INITIAL_PRESET;
+  const openComposer = (tab = "compose") => {
+    setComposerTab(tab);
+    setComposerOpen(true);
+    setSettingsOpen(false);
+  };
 
   return (
     <div className="app">
       <header className="topbar">
         <div className="brand">
-          <span className="brand__mark">◈</span>
+          <span className="brand__mark"><Icon name="brand" size={19} /></span>
           <div>
             <h1 className="brand__name">PhotoPilot</h1>
             <p className="brand__tag">Lightroom-grade photo studio · local & fast</p>
@@ -315,7 +323,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
         <div className="topbar__actions">
           {/* Hardware acceleration / GPU & CPU Selector */}
           <div className={`device-select-wrapper ${isGpuActive ? "device-select-wrapper--gpu" : ""}`}>
-            <span>{isGpuActive ? "⚡" : "💻"}</span>
+            <span className="device-select__icon">{isGpuActive ? "GPU" : "CPU"}</span>
             <select
               className="device-select"
               value={deviceMode}
@@ -339,18 +347,18 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
             title="AI Photo Curation: Detect duplicates, find best shots, and cluster similar photos"
             style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
-            <span>✨</span>
+            <Icon name="sparkle" size={15} />
             <span>AI Curate</span>
           </button>
 
           {/* Post Composer */}
           <button
             className="btn btn--primary btn--sm"
-            onClick={() => setComposerOpen(true)}
+            onClick={() => openComposer()}
             title="Post Composer: Create captions, hashtags & publish to Facebook Pages"
             style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
           >
-            <span>📝</span>
+            <Icon name="edit" size={15} />
             <span>Post Composer</span>
           </button>
 
@@ -359,8 +367,26 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
             onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
             aria-label="Toggle theme"
           >
-            {theme === "dark" ? "☀" : "☾"}
+            <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
           </button>
+          <div className="settings-menu-wrap">
+            <button
+             className={`icon-btn ${settingsOpen ? "icon-btn--active" : ""}`}
+             onClick={() => setSettingsOpen((value) => !value)}
+             aria-label="Open workspace settings"
+             title="Workspace settings"
+            >
+             <Icon name="settings" size={17} />
+            </button>
+            {settingsOpen && (
+             <div className="settings-menu">
+               <div className="settings-menu__title">Workspace</div>
+               <button onClick={() => openComposer("drafts")}><Icon name="layers" size={15} /> Drafts</button>
+               <button onClick={() => openComposer("pages")}><Icon name="folder" size={15} /> Connected Pages</button>
+               <button onClick={() => openComposer("history")}><Icon name="clock" size={15} /> Publish history</button>
+             </div>
+            )}
+          </div>
         </div>
       </header>
 
@@ -429,7 +455,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
                   className="btn btn--secondary btn--sm"
                   onClick={() => setComposerOpen(true)}
                 >
-                  📝 Open processed photos in Post Composer
+                  <Icon name="edit" size={14} /> Open processed photos in Post Composer
                 </button>
               )}
               {job.errors?.map((e) => (
@@ -477,6 +503,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
         isOpen={composerOpen}
         onClose={() => setComposerOpen(false)}
         processedPhotos={processedPhotos}
+        initialTab={composerTab}
       />
     </div>
   );

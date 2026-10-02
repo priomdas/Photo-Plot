@@ -202,6 +202,81 @@ h1, h2, p { margin: 0; }
   transform: translateY(-1px);
 }
 
+.icon-btn--sm {
+  width: 28px;
+  height: 28px;
+}
+
+.icon-btn--active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.icon {
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.icon--rotate-90 {
+  transform: rotate(90deg);
+}
+
+.settings-menu-wrap {
+  position: relative;
+}
+
+.settings-menu {
+  position: absolute;
+  z-index: 50;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 190px;
+  padding: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.settings-menu__title {
+  padding: 6px 9px 8px;
+  color: var(--text-faint);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.settings-menu button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 9px;
+  border: 0;
+  border-radius: var(--radius-xs);
+  background: transparent;
+  color: var(--text-dim);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.78rem;
+  text-align: left;
+}
+
+.settings-menu button:hover {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.device-select__icon {
+  min-width: 25px;
+  color: var(--text-faint);
+  font-size: 0.6rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
 /* ---------- Workspace 3-Pane ---------- */
 .workspace {
   flex: 1;
@@ -282,6 +357,32 @@ h1, h2, p { margin: 0; }
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.tray__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.tray__head > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tray__head strong {
+  font-size: 0.85rem;
+  letter-spacing: -0.01em;
+}
+
+.tray__eyebrow {
+  color: var(--text-faint);
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
 }
 
 .dropzone {
@@ -798,12 +899,24 @@ h1, h2, p { margin: 0; }
 
 /* ---------- Control Panel ---------- */
 .panel {
+  display: flex;
+  flex-direction: column;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   overflow: hidden;
   box-shadow: var(--shadow-sm);
 }
+
+.panel > div:first-child { order: 1; }
+.panel > .section--presets { order: 2; }
+.panel > .card-feature-toggle { order: 3; }
+.panel > .section--logo { order: 4; }
+.panel > .section--output { order: 5; }
+.panel > .section--light { order: 6; }
+.panel > .section--color { order: 7; }
+.panel > .section--effects { order: 8; }
+.panel > .section--detail { order: 9; }
 
 .section {
   border-bottom: 1px solid var(--border);

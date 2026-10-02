@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../api";
+import { Icon } from "./Icon";
 
 const CAPTION_STYLES = [
   { id: "professional", label: "Professional", icon: "💼" },
@@ -14,7 +15,7 @@ const HASHTAG_CATEGORIES = [
   "food", "travel", "product", "event",
 ];
 
-export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
+export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab = "compose" }) {
   // ──── State ────
   const [activeTab, setActiveTab] = useState("compose"); // compose | drafts | pages | history
   const [photos, setPhotos] = useState([]);
@@ -37,6 +38,10 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
   const [isConnecting, setIsConnecting] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishProgress, setPublishProgress] = useState(null);
+
+  useEffect(() => {
+    if (isOpen) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
 
   const formatEta = (seconds) => {
     if (seconds === null || seconds === undefined) return "Estimating time...";
@@ -352,7 +357,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                       const pageCount = selectedPages.length;
                       notify(
                         publishMode === "schedule"
-                          ? `Post scheduled for ${pageCount} Page${pageCount > 1 ? "s" : ""}! 📅`
+                          ?                           `Post scheduled for ${pageCount} Page${pageCount > 1 ? "s" : ""}!`
                           : `Post published to ${pageCount} Page${pageCount > 1 ? "s" : ""}! 🎉`,
                         "success"
                       );
@@ -416,7 +421,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
         {/* ──── Header ──── */}
         <header className="pc-header">
           <div className="pc-header__left">
-            <span className="pc-header__icon">📝</span>
+            <span className="pc-header__icon"><Icon name="edit" size={18} /></span>
             <div>
               <h2 className="pc-header__title">Post Composer</h2>
               <p className="pc-header__sub">Create, preview & publish to Facebook Pages</p>
@@ -428,17 +433,17 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
         {/* ──── Tabs ──── */}
         <nav className="pc-tabs">
           {[
-            { id: "compose", label: "Compose", icon: "✏️" },
-            { id: "drafts", label: "Drafts", icon: "📋", count: drafts.length },
-            { id: "pages", label: "Pages", icon: "📘", count: pages.length },
-            { id: "history", label: "History", icon: "📊", count: history.length },
+            { id: "compose", label: "Compose", icon: "edit" },
+            { id: "drafts", label: "Drafts", icon: "layers", count: drafts.length },
+            { id: "pages", label: "Pages", icon: "folder", count: pages.length },
+            { id: "history", label: "History", icon: "clock", count: history.length },
           ].map((tab) => (
             <button
               key={tab.id}
               className={`pc-tab ${activeTab === tab.id ? "pc-tab--active" : ""}`}
               onClick={() => setActiveTab(tab.id)}
             >
-              <span>{tab.icon}</span>
+              <Icon name={tab.icon} size={15} />
               <span>{tab.label}</span>
               {tab.count > 0 && <span className="pc-tab__badge">{tab.count}</span>}
             </button>
@@ -522,7 +527,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                           {selectedPage?.picture_url ? (
                             <img src={selectedPage.picture_url} alt="" />
                           ) : (
-                            <span>📘</span>
+                            <Icon name="folder" size={18} />
                           )}
                         </div>
                         <div>
@@ -608,7 +613,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                         {isGeneratingCaption ? (
                           <><span className="pc-spinner" /> Generating...</>
                         ) : (
-                          <>✨ Generate Caption</>
+                          <><Icon name="sparkle" size={14} /> Generate Caption</>
                         )}
                       </button>
                     </div>
@@ -627,7 +632,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                               notify("Hashtags copied!");
                             }}
                           >
-                            📋 Copy
+                            <><Icon name="layers" size={14} /> Copy</>
                           </button>
                           <button
                             className="pc-btn pc-btn--sm pc-btn--ghost"
@@ -666,7 +671,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                         onClick={handleGenerateHashtags}
                         disabled={isGeneratingHashtags}
                       >
-                        {isGeneratingHashtags ? "..." : "✨ Generate"}
+                        {isGeneratingHashtags ? "..." : <><Icon name="sparkle" size={14} /> Generate</>}
                       </button>
                     </div>
 
@@ -720,7 +725,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
 
                   {/* Publish Controls */}
                   <section className="pc-section pc-publish-section">
-                    <h3>🚀 Publish</h3>
+                    <h3><Icon name="upload" size={16} /> Publish</h3>
 
                     {/* Page selector */}
                     <div className="pc-page-selector">
@@ -760,7 +765,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                           className="pc-btn pc-btn--accent pc-btn--sm"
                           onClick={() => setShowConnectModal(true)}
                         >
-                          📘 Connect Facebook Page
+                          <><Icon name="folder" size={14} /> Connect Facebook Page</>
                         </button>
                       )}
                     </div>
@@ -768,16 +773,16 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                     {/* Publish mode */}
                     <div className="pc-publish-modes">
                       {[
-                        { id: "now", label: "Publish Now", icon: "🚀" },
-                        { id: "schedule", label: "Schedule", icon: "📅" },
-                        { id: "draft", label: "Save Draft", icon: "📋" },
+                        { id: "now", label: "Publish Now", icon: "upload" },
+                        { id: "schedule", label: "Schedule", icon: "clock" },
+                        { id: "draft", label: "Save Draft", icon: "layers" },
                       ].map((m) => (
                         <button
                           key={m.id}
                           className={`pc-mode-btn ${publishMode === m.id ? "pc-mode-btn--active" : ""}`}
                           onClick={() => setPublishMode(m.id)}
                         >
-                          {m.icon} {m.label}
+                          <Icon name={m.icon} size={14} /> {m.label}
                         </button>
                       ))}
                     </div>
@@ -809,11 +814,11 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                       {isPublishing ? (
                         <><span className="pc-spinner" /> {publishProgress ? `Uploading ${publishProgress.completed}/${publishProgress.total} (${publishProgress.percent}%)` : "Starting publish..."}</>
                       ) : publishMode === "now" ? (
-                        "🚀 Publish Now"
+                        <><Icon name="upload" size={15} /> Publish Now</>
                       ) : publishMode === "schedule" ? (
-                        "📅 Schedule Post"
+                        <><Icon name="clock" size={15} /> Schedule Post</>
                       ) : (
-                        "📋 Save as Draft"
+                        "Save as Draft"
                       )}
                     </button>
                     {isPublishing && publishProgress && (
@@ -835,7 +840,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
             <div className="pc-drafts">
               {drafts.length === 0 ? (
                 <div className="pc-empty-state">
-                  <span className="pc-empty-state__icon">📋</span>
+                  <span className="pc-empty-state__icon"><Icon name="layers" size={24} /></span>
                   <p>No drafts yet</p>
                   <small>Saved drafts will appear here</small>
                 </div>
@@ -885,7 +890,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
 
               {pages.length === 0 ? (
                 <div className="pc-empty-state">
-                  <span className="pc-empty-state__icon">📘</span>
+                  <span className="pc-empty-state__icon"><Icon name="folder" size={24} /></span>
                   <p>No pages connected</p>
                   <small>Connect a Facebook Page to start publishing</small>
                 </div>
@@ -894,7 +899,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
                   {pages.map((pg) => (
                     <div key={pg.page_id} className="pc-page-card">
                       <div className="pc-page-card__avatar">
-                        {pg.picture_url ? <img src={pg.picture_url} alt="" /> : <span>📘</span>}
+                        {pg.picture_url ? <img src={pg.picture_url} alt="" /> : <Icon name="folder" size={20} />}
                       </div>
                       <div className="pc-page-card__info">
                         <strong>{pg.page_name}</strong>
@@ -982,7 +987,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
             <div className="pc-history">
               {history.length === 0 ? (
                 <div className="pc-empty-state">
-                  <span className="pc-empty-state__icon">📊</span>
+                  <span className="pc-empty-state__icon"><Icon name="clock" size={24} /></span>
                   <p>No publishing history</p>
                   <small>Published and scheduled posts will appear here</small>
                 </div>

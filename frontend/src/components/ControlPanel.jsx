@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import { Icon } from "./Icon";
 
 function Slider({ label, value, min, max, step, onChange, format }) {
   const pct = Math.max(0, Math.min(100, ((value - min) / (max - min)) * 100));
@@ -38,10 +39,10 @@ function NumberField({ label, value, onChange, min, step = 1 }) {
   );
 }
 
-function Section({ title, children, defaultOpen = true }) {
+function Section({ title, children, defaultOpen = true, className = "" }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="section">
+    <section className={`section ${className}`}>
       <button className="section__head" onClick={() => setOpen((o) => !o)}>
         <span>{title}</span>
         <span className={`section__chevron ${open ? "section__chevron--open" : ""}`}>›</span>
@@ -143,7 +144,7 @@ export function ControlPanel({
       </div>
 
       {/* Presets (with DNG / XMP / JSON import) */}
-      <Section title="Presets (Lightroom DNG / XMP)" defaultOpen={true}>
+      <Section title="Presets & import" defaultOpen={true} className="section--presets">
         {/* Upload DNG preset button */}
         <input
           ref={presetInputRef}
@@ -163,7 +164,7 @@ export function ControlPanel({
           style={{ width: "100%", justifyContent: "center" }}
           onClick={() => presetInputRef.current?.click()}
         >
-          📂 Upload Preset (.DNG / .XMP / .JSON)
+          <Icon name="upload" size={14} /> Upload preset
         </button>
 
         {presets.length > 0 && (
@@ -213,7 +214,7 @@ export function ControlPanel({
         <div className="card-feature-toggle__head">
           <div className="card-feature-toggle__info">
             <div className="card-feature-toggle__title">
-              <span>✨</span> Auto Quality Boost
+              <Icon name="sparkle" size={15} /> Auto Quality Boost
             </div>
             <div className="card-feature-toggle__sub">
               Micro-contrast, texture recovery & smart sharpening
@@ -244,7 +245,7 @@ export function ControlPanel({
       </div>
 
       {/* Light Panel */}
-      <Section title="Light" defaultOpen={true}>
+      <Section title="Light" defaultOpen={true} className="section--light">
         <Slider
           label="Exposure"
           value={adj.exposure ?? 0}
@@ -309,7 +310,7 @@ export function ControlPanel({
       </Section>
 
       {/* Color Panel */}
-      <Section title="Color" defaultOpen={true}>
+      <Section title="Color" defaultOpen={true} className="section--color">
         <Slider
           label="Temp"
           value={adj.temperature ?? 0}
@@ -356,7 +357,7 @@ export function ControlPanel({
       </Section>
 
       {/* Effects / Presence */}
-      <Section title="Effects" defaultOpen={false}>
+      <Section title="Effects" defaultOpen={false} className="section--effects">
         <Slider
           label="Clarity"
           value={adj.clarity ?? 0}
@@ -403,7 +404,7 @@ export function ControlPanel({
       </Section>
 
       {/* Detail / Sharpness */}
-      <Section title="Detail" defaultOpen={false}>
+      <Section title="Detail" defaultOpen={false} className="section--detail">
         <Slider
           label="Sharpness"
           value={adj.sharpness ?? 25}
@@ -423,7 +424,7 @@ export function ControlPanel({
       </Section>
 
       {/* Logo / Watermark Section */}
-      <Section title="Logo / Watermark" defaultOpen={false}>
+      <Section title="Logo / Watermark" defaultOpen={true} className="section--logo">
         <label className="uploader">
           <input type="file" accept={LOGO_ACCEPT} hidden onChange={(e) => onLogo(e.target.files?.[0] || null)} />
           <span>{logo ? logo.name : "Choose logo image"}</span>
@@ -499,7 +500,7 @@ export function ControlPanel({
       </Section>
 
       {/* Output Section */}
-      <Section title="Output format & size" defaultOpen={false}>
+      <Section title="Output format & size" defaultOpen={true} className="section--output">
         <label className="field">
           <span className="field__label">Format</span>
           <select className="input" value={preset.format} onChange={(e) => onUpdate("format", e.target.value)}>
