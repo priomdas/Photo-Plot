@@ -15,10 +15,29 @@ PhotoPilot is a local React + FastAPI photo studio for batch editing, RAW/DNG pr
 
 All image processing runs locally. Facebook publishing is the only feature that sends data to Facebook's Graph API.
 
+## PC requirements
+
+PhotoPilot is designed for **Windows 10 or Windows 11 (64-bit)**.
+
+Required:
+
+- Python **3.10 or newer** (64-bit; Python 3.13 is supported).
+- Node.js **18 or newer** (npm is included with Node.js).
+- A modern web browser such as Chrome, Edge, or Firefox.
+- At least **8 GB RAM** recommended; more is helpful when processing many RAW photos.
+- Enough free disk space for the original photos, the virtual environment, `node_modules`, and generated files in `processed/`.
+- Internet access only for the initial package installation and Facebook Graph API publishing. Photo processing and curation run locally.
+
+Optional:
+
+- Git, only if you are cloning or updating the project from GitHub.
+- An NVIDIA/CUDA-compatible GPU and a matching PyTorch installation. CPU mode works without a GPU.
+- A Facebook Page and valid Page/User Access Token, only if Facebook publishing is needed.
+
 ## Windows setup
 
-1. Install Python 3.10+ and Node.js 18+.
-2. In PowerShell:
+1. Install the required software listed above.
+2. In PowerShell, from the project folder:
 
 ```powershell
 py -m venv .venv
