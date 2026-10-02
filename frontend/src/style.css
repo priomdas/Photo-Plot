@@ -2493,6 +2493,27 @@ select.input {
   margin-bottom: 12px;
 }
 
+.pc-page-checkboxes {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pc-page-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-2);
+  cursor: pointer;
+}
+
+.pc-page-checkbox input {
+  accent-color: var(--accent);
+}
+
 .pc-publish-modes {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr;

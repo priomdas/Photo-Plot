@@ -11,7 +11,7 @@ PhotoPilot is a local React + FastAPI photo studio for batch editing, RAW/DNG pr
 - Undo/redo for editing changes.
 - AI curation for duplicate detection, similar-scene grouping, quality ranking, face/blur/exposure analysis, and “Select Best N”.
 - Folder curation through the in-app **Browse Folder** picker, or direct browser file upload.
-- Facebook Post Composer with captions, hashtags, saved hashtag sets, drafts, Page connections, scheduling, publishing history, and upload progress/ETA.
+- Facebook Post Composer with captions, hashtags, saved hashtag sets, drafts, multiple Page connections, multi-Page publishing, scheduling, publishing history, and upload progress/ETA.
 
 All image processing runs locally. Facebook publishing is the only feature that sends data to Facebook's Graph API.
 
@@ -85,7 +85,7 @@ Open http://localhost:5173. Processed files are written to `processed/`, logs to
 3. Connect a Facebook Page using a valid Page Access Token or User Access Token.
 4. Write/generate a caption and hashtags.
 5. Choose **Publish Now**, **Schedule**, or **Save Draft**.
-6. During publishing, the composer shows uploaded photo count, percentage, and estimated remaining time.
+6. Select one or more connected Pages. During publishing, the composer shows total Page/photo progress, percentage, and estimated remaining time.
 
 Facebook tokens are stored only in the local ignored database. A new computer must connect its Facebook Page again.
 

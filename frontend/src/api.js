@@ -234,13 +234,14 @@ export function disconnectFacebookPage(pageId) {
 }
 
 // Publishing
-export function publishPost({ draftId = "", pageId, caption, hashtags = [], photoPaths = [], scheduledPublishTime = 0 }) {
+export function publishPost({ draftId = "", pageId = "", pageIds = [], caption, hashtags = [], photoPaths = [], scheduledPublishTime = 0 }) {
   return fetch("/api/social/publish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       draft_id: draftId,
       page_id: pageId,
+      page_ids: pageIds,
       caption,
       hashtags,
       photo_paths: photoPaths,

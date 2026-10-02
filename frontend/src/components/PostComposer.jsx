@@ -27,7 +27,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
   const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
   const [isGeneratingHashtags, setIsGeneratingHashtags] = useState(false);
   const [pages, setPages] = useState([]);
-  const [selectedPage, setSelectedPage] = useState(null);
+  const [selectedPages, setSelectedPages] = useState([]);
   const [drafts, setDrafts] = useState([]);
   const [history, setHistory] = useState([]);
   const [hashtagSets, setHashtagSets] = useState([]);
@@ -53,6 +53,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
   const [folderPath, setFolderPath] = useState("");
   const fileInputRef = useRef(null);
   const captionRef = useRef(null);
+  const selectedPage = selectedPages[0] || null;
 
   // ──── Load data on open ────
   useEffect(() => {
@@ -242,7 +243,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
     try {
       await api.disconnectFacebookPage(pageId);
       setPages(await api.getFacebookPages());
-      if (selectedPage?.page_id === pageId) setSelectedPage(null);
+      setSelectedPages((prev) => prev.filter((pg) => pg.page_id !== pageId));
       notify("Page disconnected");
     } catch (err) {
       notify(`Disconnect failed: ${err.message}`, "error");
@@ -309,8 +310,8 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
       return;
     }
 
-    if (!selectedPage) {
-      notify("Please connect and select a Facebook Page first", "error");
+    if (!selectedPages.length) {
+      notify("Please connect and select at least one Facebook Page first", "error");
       return;
     }
 
@@ -327,13 +328,19 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
       }
 
       const { job_id } = await api.publishPost({
-        pageId: selectedPage.page_id,
+        pageId: selectedPages[0].page_id,
+        pageIds: selectedPages.map((pg) => pg.page_id),
         caption,
         hashtags,
         photoPaths,
         scheduledPublishTime: scheduledTime,
       });
-      setPublishProgress({ completed: 0, total: photoPaths.length, percent: 0, status: "uploading" });
+      setPublishProgress({
+        completed: 0,
+        total: photoPaths.length * selectedPages.length,
+        percent: 0,
+        status: "uploading",
+      });
       await new Promise((resolve, reject) => {
         const started = Date.now();
         const poll = async () => {
@@ -342,7 +349,13 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
             setPublishProgress(progress);
             if (progress.status === "complete") {
               setHistory(await api.getPublishHistory());
-              notify(publishMode === "schedule" ? "Post scheduled successfully! 📅" : "Post published successfully! 🎉", "success");
+                      const pageCount = selectedPages.length;
+                      notify(
+                        publishMode === "schedule"
+                          ? `Post scheduled for ${pageCount} Page${pageCount > 1 ? "s" : ""}! 📅`
+                          : `Post published to ${pageCount} Page${pageCount > 1 ? "s" : ""}! 🎉`,
+                        "success"
+                      );
               resolve();
             } else if (progress.status === "failed") {
               reject(new Error(progress.error || "Publishing failed"));
@@ -711,23 +724,27 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
 
                     {/* Page selector */}
                     <div className="pc-page-selector">
-                      <label className="pc-label">Publish to:</label>
+                      <label className="pc-label">Publish to ({selectedPages.length} selected):</label>
                       {pages.length > 0 ? (
-                        <select
-                          className="pc-select"
-                          value={selectedPage?.page_id || ""}
-                          onChange={(e) => {
-                            const pg = pages.find((p) => p.page_id === e.target.value);
-                            setSelectedPage(pg || null);
-                          }}
-                        >
-                          <option value="">Select a page...</option>
-                          {pages.map((pg) => (
-                            <option key={pg.page_id} value={pg.page_id}>
-                              {pg.page_name} ({pg.category || "Page"})
-                            </option>
-                          ))}
-                        </select>
+                        <div className="pc-page-checkboxes">
+                          {pages.map((pg) => {
+                            const checked = selectedPages.some((selected) => selected.page_id === pg.page_id);
+                            return (
+                              <label key={pg.page_id} className="pc-page-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => setSelectedPages((prev) =>
+                                    checked
+                                      ? prev.filter((selected) => selected.page_id !== pg.page_id)
+                                      : [...prev, pg]
+                                  )}
+                                />
+                                <span>{pg.page_name} ({pg.category || "Page"})</span>
+                              </label>
+                            );
+                          })}
+                        </div>
                       ) : (
                         <button
                           className="pc-btn pc-btn--accent pc-btn--sm"

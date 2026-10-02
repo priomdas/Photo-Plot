@@ -79,6 +79,7 @@ class ConnectPagesFromUserTokenRequest(BaseModel):
 class PublishRequest(BaseModel):
     draft_id: str = ""
     page_id: str = ""
+    page_ids: list[str] = Field(default_factory=list)
     caption: str = ""
     hashtags: list[str] = Field(default_factory=list)
     photo_paths: list[str] = Field(default_factory=list)
@@ -305,53 +306,94 @@ def disconnect_page(page_id: str) -> dict[str, str]:
 def _run_publish_job(job_id: str, req: PublishRequest) -> None:
     job = publish_jobs[job_id]
     try:
-        page_data = db.get_facebook_page(req.page_id)
-        if not page_data:
-            raise FacebookPublishError("Facebook Page not connected")
+        page_ids = list(dict.fromkeys(req.page_ids or ([req.page_id] if req.page_id else [])))
+        pages = [(page_id, db.get_facebook_page(page_id)) for page_id in page_ids]
+        missing = [page_id for page_id, page_data in pages if not page_data]
+        if missing:
+            raise FacebookPublishError(f"Facebook Page(s) not connected: {', '.join(missing)}")
 
         full_caption = req.caption
         if req.hashtags:
             full_caption += "\n\n" + " ".join(req.hashtags)
 
-        def on_progress(completed: int, total: int) -> None:
+        total_work = len(req.photo_paths) * len(pages)
+        completed_work = 0
+        results = []
+        errors = []
+
+        def on_progress(completed: int, page_total: int) -> None:
             job["completed"] = completed
-            job["total"] = total
-            job["percent"] = round(completed / total * 100) if total else 100
+            job["total"] = total_work
+            job["percent"] = round(completed / total_work * 100) if total_work else 100
             elapsed = time.time() - job["started_at"]
             job["elapsed_seconds"] = round(elapsed, 1)
-            job["eta_seconds"] = round(elapsed / completed * (total - completed), 1) if completed else None
+            job["eta_seconds"] = round(elapsed / completed * (total_work - completed), 1) if completed else None
 
-        if req.scheduled_publish_time > 0:
-            result = schedule_post(
-                page_id=req.page_id,
-                page_access_token=page_data["access_token"],
-                photo_paths=req.photo_paths,
-                caption=full_caption,
-                scheduled_publish_time=req.scheduled_publish_time,
-            )
-            status = "scheduled"
-            on_progress(len(req.photo_paths), len(req.photo_paths))
-        else:
-            result = publish_multi_photo(
-                page_id=req.page_id,
-                page_access_token=page_data["access_token"],
-                photo_paths=req.photo_paths,
-                caption=full_caption,
-                progress_cb=on_progress,
-            )
-            status = "published"
+        for page_id, page_data in pages:
+            assert page_data is not None
 
-        record = db.record_published_post(
-            draft_id=req.draft_id,
-            fb_post_id=result.get("id", result.get("post_id", "")),
-            page_id=req.page_id,
-            page_name=page_data["page_name"],
-            caption=req.caption,
-            hashtags=req.hashtags,
-            photo_paths=req.photo_paths,
-            status=status,
+            def page_progress(completed: int, total: int) -> None:
+                on_progress(completed_work + completed, total)
+
+            try:
+                if req.scheduled_publish_time > 0:
+                    result = schedule_post(
+                        page_id=page_id,
+                        page_access_token=page_data["access_token"],
+                        photo_paths=req.photo_paths,
+                        caption=full_caption,
+                        scheduled_publish_time=req.scheduled_publish_time,
+                    )
+                    status = "scheduled"
+                    page_progress(len(req.photo_paths), len(req.photo_paths))
+                else:
+                    result = publish_multi_photo(
+                        page_id=page_id,
+                        page_access_token=page_data["access_token"],
+                        photo_paths=req.photo_paths,
+                        caption=full_caption,
+                        progress_cb=page_progress,
+                    )
+                    status = "published"
+                    if len(req.photo_paths) == 1:
+                        page_progress(1, 1)
+
+                record = db.record_published_post(
+                    draft_id=req.draft_id,
+                    fb_post_id=result.get("id", result.get("post_id", "")),
+                    page_id=page_id,
+                    page_name=page_data["page_name"],
+                    caption=req.caption,
+                    hashtags=req.hashtags,
+                    photo_paths=req.photo_paths,
+                    status=status,
+                )
+                results.append({**record, "fb_result": result})
+            except FacebookPublishError as exc:
+                errors.append({"page_id": page_id, "page_name": page_data["page_name"], "error": str(exc)})
+                db.record_published_post(
+                    draft_id=req.draft_id,
+                    page_id=page_id,
+                    page_name=page_data["page_name"],
+                    error=str(exc),
+                    caption=req.caption,
+                    hashtags=req.hashtags,
+                    photo_paths=req.photo_paths,
+                    status="failed",
+                )
+            completed_work += len(req.photo_paths)
+            on_progress(completed_work, len(req.photo_paths))
+
+        if not results:
+            raise FacebookPublishError("Publishing failed for all selected Pages")
+        job.update(
+            status="complete",
+            result={"pages": results, "errors": errors, "partial": bool(errors)},
+            percent=100,
+            completed=total_work,
+            total=total_work,
+            eta_seconds=0,
         )
-        job.update(status="complete", result={**record, "fb_result": result}, percent=100, eta_seconds=0)
     except FacebookPublishError as exc:
         publish_jobs[job_id].update(status="failed", error=str(exc))
         db.record_published_post(
@@ -371,13 +413,17 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
 @router.post("/publish")
 def publish_post(req: PublishRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
     """Start a publish job and return immediately so the UI can show progress."""
+    page_ids = list(dict.fromkeys(req.page_ids or ([req.page_id] if req.page_id else [])))
     if not req.photo_paths:
         raise HTTPException(status_code=400, detail="At least one photo is required")
+    if not page_ids:
+        raise HTTPException(status_code=400, detail="At least one Facebook Page is required")
+    req.page_ids = page_ids
     job_id = uuid4().hex
     publish_jobs[job_id] = {
         "status": "uploading",
         "completed": 0,
-        "total": len(req.photo_paths),
+        "total": len(req.photo_paths) * len(page_ids),
         "percent": 0,
         "started_at": time.time(),
         "elapsed_seconds": 0,
