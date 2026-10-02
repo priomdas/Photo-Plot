@@ -724,27 +724,37 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [] }) {
 
                     {/* Page selector */}
                     <div className="pc-page-selector">
-                      <label className="pc-label">Publish to ({selectedPages.length} selected):</label>
+                      <label className="pc-label">Publish to:</label>
                       {pages.length > 0 ? (
-                        <div className="pc-page-checkboxes">
-                          {pages.map((pg) => {
-                            const checked = selectedPages.some((selected) => selected.page_id === pg.page_id);
-                            return (
-                              <label key={pg.page_id} className="pc-page-checkbox">
-                                <input
-                                  type="checkbox"
-                                  checked={checked}
-                                  onChange={() => setSelectedPages((prev) =>
-                                    checked
-                                      ? prev.filter((selected) => selected.page_id !== pg.page_id)
-                                      : [...prev, pg]
-                                  )}
-                                />
-                                <span>{pg.page_name} ({pg.category || "Page"})</span>
-                              </label>
-                            );
-                          })}
-                        </div>
+                        <details className="pc-page-dropdown">
+                          <summary>
+                            <span>
+                              {selectedPages.length
+                                ? `${selectedPages.length} Page${selectedPages.length > 1 ? "s" : ""} selected`
+                                : "Select Pages..."}
+                            </span>
+                            <span className="pc-page-dropdown__chevron">⌄</span>
+                          </summary>
+                          <div className="pc-page-dropdown__menu">
+                            {pages.map((pg) => {
+                              const checked = selectedPages.some((selected) => selected.page_id === pg.page_id);
+                              return (
+                                <label key={pg.page_id} className="pc-page-checkbox">
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => setSelectedPages((prev) =>
+                                      checked
+                                        ? prev.filter((selected) => selected.page_id !== pg.page_id)
+                                        : [...prev, pg]
+                                    )}
+                                  />
+                                  <span>{pg.page_name} ({pg.category || "Page"})</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        </details>
                       ) : (
                         <button
                           className="pc-btn pc-btn--accent pc-btn--sm"
