@@ -78,7 +78,13 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
     api.getPublishHistory().then(setHistory).catch(() => {});
     api.getCaptionConfig().then((config) => {
       setCaptionConfig(config);
-      setCaptionProvider(config.provider || "rule-based");
+      setCaptionProvider(
+        config.provider === "rule-based"
+          ? "rule-based"
+          : config.provider === "local-vlm"
+            ? "local-vlm"
+            : "online"
+      );
     }).catch(() => {});
 
     // If processedPhotos are passed, auto-load them

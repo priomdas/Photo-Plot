@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from . import db
 from .caption import (
     CaptionResult,
+    OnlineCaptionProvider,
     RuleCaptionProvider,
     get_caption_config,
     get_caption_provider,
@@ -164,7 +165,10 @@ def update_caption_config(req: CaptionConfigRequest) -> dict[str, str]:
 @router.post("/caption/test")
 def test_caption_connection(req: CaptionConfigRequest) -> dict[str, Any]:
     try:
-        return test_caption_config(req.model_dump())
+        config = req.model_dump()
+        if config["provider"] == "rule-based":
+            raise RuntimeError("Choose Gemini or OpenAI-compatible as the online provider")
+        return test_caption_config(config)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
@@ -173,7 +177,10 @@ def test_caption_connection(req: CaptionConfigRequest) -> dict[str, Any]:
 def generate_caption(req: GenerateCaptionRequest) -> dict[str, Any]:
     """Generate a caption for a photo."""
     use_vlm = req.provider == "local-vlm"
-    provider = RuleCaptionProvider() if req.provider == "rule-based" else get_caption_provider(prefer_local_vlm=use_vlm)
+    if req.provider == "online":
+        provider = OnlineCaptionProvider()
+    else:
+        provider = RuleCaptionProvider() if req.provider == "rule-based" else get_caption_provider(prefer_local_vlm=use_vlm)
 
     if req.image_path and not Path(req.image_path).exists():
         raise HTTPException(status_code=404, detail=f"Image not found: {req.image_path}")

@@ -389,6 +389,8 @@ class OnlineCaptionProvider(CaptionProvider):
 
 def test_caption_config(config: dict[str, str]) -> dict[str, Any]:
     merged = {**_caption_config(), **config}
+    if "••••" in merged.get("api_key", ""):
+        merged["api_key"] = _caption_config().get("api_key", "")
     result = OnlineCaptionProvider(merged).generate_caption("", "professional", "Write a short test caption about photography.")
     return {"ok": True, "model_name": result.model_name}
 
