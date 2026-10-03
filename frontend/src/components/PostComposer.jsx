@@ -31,7 +31,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const [captionConfig, setCaptionConfig] = useState({
     provider: "gemini",
     api_key: "",
-    model: "gemini-2.0-flash",
+    model: "gemini-2.5-flash",
     base_url: "https://generativelanguage.googleapis.com/v1beta",
   });
   const [showCaptionSettings, setShowCaptionSettings] = useState(false);

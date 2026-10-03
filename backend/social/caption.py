@@ -308,10 +308,14 @@ CONFIG_PATH = Path(__file__).resolve().parents[2] / "logs" / "caption_ai.json"
 def _caption_config() -> dict[str, str]:
     if CONFIG_PATH.exists():
         try:
-            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            config = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+            # Gemini 2.0 Flash has been retired; migrate the old app default.
+            if config.get("model") == "gemini-2.0-flash":
+                config["model"] = "gemini-2.5-flash"
+            return config
         except (OSError, ValueError):
             logger.warning("Could not read caption AI configuration")
-    return {"provider": "rule-based", "api_key": "", "model": "gemini-2.0-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta"}
+    return {"provider": "rule-based", "api_key": "", "model": "gemini-2.5-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta"}
 
 
 def get_caption_config(mask_key: bool = True) -> dict[str, str]:
@@ -373,6 +377,13 @@ class OnlineCaptionProvider(CaptionProvider):
                 response.raise_for_status()
                 text = data["choices"][0]["message"]["content"]
             return CaptionResult(text.strip(), [], 0.9, f"{provider}:{self.config['model']}")
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404 and provider == "gemini":
+                raise RuntimeError(
+                    f"Gemini model '{self.config['model']}' was not found. "
+                    "Use a currently available model such as gemini-2.5-flash."
+                ) from exc
+            raise RuntimeError(f"Online caption request failed: {exc}") from exc
         except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
             raise RuntimeError(f"Online caption request failed: {exc}") from exc
 
