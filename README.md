@@ -12,6 +12,7 @@ PhotoPilot is a local React + FastAPI photo studio for batch editing, RAW/DNG pr
 - AI curation for duplicate detection, similar-scene grouping, quality ranking, face/blur/exposure analysis, and “Select Best N”.
 - Folder curation through the in-app **Browse Folder** picker, or direct browser file upload.
 - Facebook Post Composer with captions, hashtags, saved hashtag sets, drafts, multiple Page connections, multi-Page publishing, scheduling, publishing history, and upload progress/ETA.
+- Caption AI settings with offline generation plus optional text-only Gemini or OpenAI-compatible providers, connection testing, and local API-key storage.
 
 All image processing runs locally. Facebook publishing is the only feature that sends data to Facebook's Graph API.
 
@@ -88,6 +89,10 @@ Open http://localhost:5173. Processed files are written to `processed/`, logs to
 6. Select one or more connected Pages. During publishing, the composer shows total Page/photo progress, percentage, and estimated remaining time.
 
 Facebook tokens are stored only in the local ignored database. A new computer must connect its Facebook Page again.
+
+### Caption AI providers
+
+Open **Post Composer → AI settings** to choose the offline generator, local vision model, or an online text-only provider. Online mode supports Google Gemini and OpenAI-compatible endpoints. Enter the model, API key, and endpoint, then click **Test connection** and **Save locally**. The key is stored in the ignored `logs/caption_ai.json` file and is never sent to the frontend or committed to GitHub. Online mode uses the written context/prompt; it does not upload the selected photo.
 
 ## Checks
 

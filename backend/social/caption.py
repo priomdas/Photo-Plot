@@ -12,10 +12,13 @@ LocalCaptionProvider can be enabled when a local VLM model is downloaded.
 from __future__ import annotations
 
 import abc
+import json
 import logging
 import re
 from pathlib import Path
 from typing import Any
+
+import httpx
 
 logger = logging.getLogger("photopilot.social.caption")
 
@@ -299,6 +302,97 @@ class LocalCaptionProvider(CaptionProvider):
         return "Local VLM (Moondream2)" if self.is_available() else "Local VLM (Not Installed)"
 
 
+CONFIG_PATH = Path(__file__).resolve().parents[2] / "logs" / "caption_ai.json"
+
+
+def _caption_config() -> dict[str, str]:
+    if CONFIG_PATH.exists():
+        try:
+            return json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            logger.warning("Could not read caption AI configuration")
+    return {"provider": "rule-based", "api_key": "", "model": "gemini-2.0-flash", "base_url": "https://generativelanguage.googleapis.com/v1beta"}
+
+
+def get_caption_config(mask_key: bool = True) -> dict[str, str]:
+    config = _caption_config()
+    if mask_key and config.get("api_key"):
+        config["api_key"] = f"{config['api_key'][:4]}••••{config['api_key'][-4:]}"
+    return config
+
+
+def save_caption_config(config: dict[str, str]) -> dict[str, str]:
+    current = _caption_config()
+    for key in ("provider", "model", "base_url"):
+        if key in config:
+            current[key] = str(config[key]).strip()
+    if config.get("api_key") and "••••" not in config["api_key"]:
+        current["api_key"] = config["api_key"].strip()
+    CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    CONFIG_PATH.write_text(json.dumps(current, indent=2), encoding="utf-8")
+    return get_caption_config()
+
+
+class OnlineCaptionProvider(CaptionProvider):
+    """Text-only online generation using Gemini or an OpenAI-compatible API."""
+
+    def __init__(self, config: dict[str, str] | None = None):
+        self.config = config or _caption_config()
+
+    def generate_caption(self, image_path: str, style: str = "professional",
+                         context: str = "") -> CaptionResult:
+        if not self.is_available():
+            raise RuntimeError("Online caption provider is not configured")
+        prompt = (
+            f"Write one polished social media caption in a {style} style. "
+            "Return only the caption and do not invent visual details. "
+            f"User description: {context or 'Create a versatile photography caption.'}"
+        )
+        provider = self.config["provider"]
+        try:
+            if provider == "gemini":
+                base = self.config.get("base_url", "https://generativelanguage.googleapis.com/v1beta").rstrip("/")
+                response = httpx.post(
+                    f"{base}/models/{self.config['model']}:generateContent",
+                    params={"key": self.config["api_key"]},
+                    json={"contents": [{"parts": [{"text": prompt}]}]},
+                    timeout=45,
+                )
+                data = response.json()
+                response.raise_for_status()
+                text = data["candidates"][0]["content"]["parts"][0]["text"]
+            else:
+                base = self.config.get("base_url", "https://api.openai.com/v1").rstrip("/")
+                response = httpx.post(
+                    f"{base}/chat/completions",
+                    headers={"Authorization": f"Bearer {self.config['api_key']}"},
+                    json={"model": self.config["model"], "messages": [{"role": "user", "content": prompt}], "temperature": 0.8},
+                    timeout=45,
+                )
+                data = response.json()
+                response.raise_for_status()
+                text = data["choices"][0]["message"]["content"]
+            return CaptionResult(text.strip(), [], 0.9, f"{provider}:{self.config['model']}")
+        except (httpx.HTTPError, KeyError, IndexError, TypeError) as exc:
+            raise RuntimeError(f"Online caption request failed: {exc}") from exc
+
+    def generate_hashtags(self, caption: str = "", image_path: str = "",
+                          category: str = "photography", count: int = 15) -> list[str]:
+        return RuleCaptionProvider().generate_hashtags(caption, image_path, category, count)
+
+    def is_available(self) -> bool:
+        return self.config.get("provider") in {"gemini", "openai-compatible"} and bool(self.config.get("api_key") and self.config.get("model"))
+
+    def provider_name(self) -> str:
+        return f"Online ({self.config.get('provider', 'not configured')})"
+
+
+def test_caption_config(config: dict[str, str]) -> dict[str, Any]:
+    merged = {**_caption_config(), **config}
+    result = OnlineCaptionProvider(merged).generate_caption("", "professional", "Write a short test caption about photography.")
+    return {"ok": True, "model_name": result.model_name}
+
+
 # ─────────────────────────────────────────────
 # Provider Factory
 # ─────────────────────────────────────────────
@@ -314,6 +408,9 @@ def get_caption_provider(prefer_local_vlm: bool = False) -> CaptionProvider:
         if provider.is_available():
             _active_provider = provider
             return provider
+    configured = OnlineCaptionProvider()
+    if configured.is_available():
+        return configured
     if _active_provider is None:
         _active_provider = RuleCaptionProvider()
     return _active_provider
@@ -323,12 +420,19 @@ def list_providers() -> list[dict[str, Any]]:
     """List all available providers and their status."""
     rule = RuleCaptionProvider()
     local = LocalCaptionProvider()
+    online = OnlineCaptionProvider()
     return [
         {
             "id": "rule-based",
             "name": rule.provider_name(),
             "available": rule.is_available(),
             "description": "Template-based captions and curated hashtag pools. Always available offline.",
+        },
+        {
+            "id": "online",
+            "name": online.provider_name(),
+            "available": online.is_available(),
+            "description": "Text-only online captions using Gemini or an OpenAI-compatible endpoint.",
         },
         {
             "id": "local-vlm",

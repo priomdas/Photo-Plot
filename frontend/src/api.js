@@ -130,6 +130,26 @@ export function getCaptionProviders() {
   return fetch("/api/social/providers").then(asJson);
 }
 
+export function getCaptionConfig() {
+  return fetch("/api/social/caption/config").then(asJson);
+}
+
+export function saveCaptionConfig(config) {
+  return fetch("/api/social/caption/config", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  }).then(asJson);
+}
+
+export function testCaptionConnection(config) {
+  return fetch("/api/social/caption/test", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(config),
+  }).then(asJson);
+}
+
 export async function uploadPhotosForPublish(files) {
   const data = new FormData();
   files.forEach((f) => data.append("files", f));

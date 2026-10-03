@@ -2750,6 +2750,34 @@ select.input {
   font-size: 0.66rem;
 }
 
+.pc-ai-settings {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+
+.pc-ai-settings__row {
+  display: grid;
+  gap: 5px;
+}
+
+.pc-ai-settings__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.pc-ai-status--ok {
+  color: var(--success);
+}
+
+.pc-ai-status--error {
+  color: var(--danger);
+}
+
 .pc-page-checkbox input {
   accent-color: var(--accent);
 }

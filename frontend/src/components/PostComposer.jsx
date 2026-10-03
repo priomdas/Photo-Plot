@@ -27,6 +27,15 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const [hashtagCategory, setHashtagCategory] = useState("photography");
   const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
   const [isGeneratingHashtags, setIsGeneratingHashtags] = useState(false);
+  const [captionProvider, setCaptionProvider] = useState("rule-based");
+  const [captionConfig, setCaptionConfig] = useState({
+    provider: "gemini",
+    api_key: "",
+    model: "gemini-2.0-flash",
+    base_url: "https://generativelanguage.googleapis.com/v1beta",
+  });
+  const [showCaptionSettings, setShowCaptionSettings] = useState(false);
+  const [captionConnection, setCaptionConnection] = useState(null);
   const [pages, setPages] = useState([]);
   const [selectedPages, setSelectedPages] = useState([]);
   const [drafts, setDrafts] = useState([]);
@@ -67,6 +76,10 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
     api.getDrafts().then(setDrafts).catch(() => {});
     api.getHashtagSets().then(setHashtagSets).catch(() => {});
     api.getPublishHistory().then(setHistory).catch(() => {});
+    api.getCaptionConfig().then((config) => {
+      setCaptionConfig(config);
+      setCaptionProvider(config.provider || "rule-based");
+    }).catch(() => {});
 
     // If processedPhotos are passed, auto-load them
     if (processedPhotos.length > 0) {
@@ -155,6 +168,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
         imagePath: firstPhoto?.path || "",
         style: captionStyle,
         context: contextInput,
+        provider: captionProvider,
       });
       setCaption(result.caption);
       notify(`Caption generated (${result.model_name})`, "success");
@@ -571,9 +585,58 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                   {/* Caption */}
                   <section className="pc-section">
                     <div className="pc-section__head">
-                      <h3>✍️ Caption</h3>
+                      <h3><Icon name="edit" size={16} /> Caption</h3>
+                      <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={() => setShowCaptionSettings((open) => !open)}>
+                        AI settings
+                      </button>
                       <span className="pc-char-count" data-warn={charCount > 60000}>{charCount.toLocaleString()}</span>
                     </div>
+
+                    {showCaptionSettings && (
+                      <div className="pc-ai-settings">
+                        <div className="pc-ai-settings__row">
+                          <label className="pc-label">Generator</label>
+                          <select className="pc-select" value={captionProvider} onChange={(e) => setCaptionProvider(e.target.value)}>
+                            <option value="rule-based">Local offline</option>
+                            <option value="local-vlm">Local vision model</option>
+                            <option value="online">Online text AI</option>
+                          </select>
+                        </div>
+                        {captionProvider === "online" && (
+                          <>
+                            <div className="pc-ai-settings__row">
+                              <label className="pc-label">Provider</label>
+                              <select className="pc-select" value={captionConfig.provider} onChange={(e) => setCaptionConfig((c) => ({ ...c, provider: e.target.value }))}>
+                                <option value="gemini">Google Gemini</option>
+                                <option value="openai-compatible">OpenAI-compatible</option>
+                              </select>
+                            </div>
+                            <input className="pc-input" placeholder="Model name" value={captionConfig.model} onChange={(e) => setCaptionConfig((c) => ({ ...c, model: e.target.value }))} />
+                            <input className="pc-input" placeholder="API key (stored locally)" type="password" value={captionConfig.api_key} onChange={(e) => setCaptionConfig((c) => ({ ...c, api_key: e.target.value }))} />
+                            <input className="pc-input" placeholder="API base URL" value={captionConfig.base_url} onChange={(e) => setCaptionConfig((c) => ({ ...c, base_url: e.target.value }))} />
+                            <div className="pc-ai-settings__actions">
+                              <button className="pc-btn pc-btn--sm pc-btn--accent" onClick={async () => {
+                                try {
+                                  await api.saveCaptionConfig(captionConfig);
+                                  setCaptionConnection({ ok: true, message: "Saved locally" });
+                                } catch (err) {
+                                  setCaptionConnection({ ok: false, message: err.message });
+                                }
+                              }}>Save locally</button>
+                              <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={async () => {
+                                try {
+                                  const result = await api.testCaptionConnection(captionConfig);
+                                  setCaptionConnection({ ok: true, message: `Connected: ${result.model_name}` });
+                                } catch (err) {
+                                  setCaptionConnection({ ok: false, message: err.message });
+                                }
+                              }}>Test connection</button>
+                            </div>
+                            {captionConnection && <small className={captionConnection.ok ? "pc-ai-status--ok" : "pc-ai-status--error"}>{captionConnection.message}</small>}
+                          </>
+                        )}
+                      </div>
+                    )}
 
                     {/* Style selector */}
                     <div className="pc-style-pills">

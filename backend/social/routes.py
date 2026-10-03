@@ -16,7 +16,15 @@ from fastapi import APIRouter, BackgroundTasks, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
 
 from . import db
-from .caption import CaptionResult, get_caption_provider, list_providers
+from .caption import (
+    CaptionResult,
+    RuleCaptionProvider,
+    get_caption_config,
+    get_caption_provider,
+    list_providers,
+    save_caption_config,
+    test_caption_config,
+)
 from .facebook import (
     FacebookPublishError,
     get_managed_pages,
@@ -42,6 +50,13 @@ class GenerateCaptionRequest(BaseModel):
     style: str = "professional"
     context: str = ""
     provider: str = "rule-based"
+
+
+class CaptionConfigRequest(BaseModel):
+    provider: str = "rule-based"
+    api_key: str = ""
+    model: str = ""
+    base_url: str = ""
 
 
 class GenerateHashtagsRequest(BaseModel):
@@ -136,20 +151,37 @@ def get_providers() -> list[dict[str, Any]]:
     return list_providers()
 
 
+@router.get("/caption/config")
+def caption_config() -> dict[str, str]:
+    return get_caption_config()
+
+
+@router.put("/caption/config")
+def update_caption_config(req: CaptionConfigRequest) -> dict[str, str]:
+    return save_caption_config(req.model_dump())
+
+
+@router.post("/caption/test")
+def test_caption_connection(req: CaptionConfigRequest) -> dict[str, Any]:
+    try:
+        return test_caption_config(req.model_dump())
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.post("/caption/generate")
 def generate_caption(req: GenerateCaptionRequest) -> dict[str, Any]:
     """Generate a caption for a photo."""
     use_vlm = req.provider == "local-vlm"
-    provider = get_caption_provider(prefer_local_vlm=use_vlm)
+    provider = RuleCaptionProvider() if req.provider == "rule-based" else get_caption_provider(prefer_local_vlm=use_vlm)
 
     if req.image_path and not Path(req.image_path).exists():
         raise HTTPException(status_code=404, detail=f"Image not found: {req.image_path}")
 
-    result = provider.generate_caption(
-        image_path=req.image_path,
-        style=req.style,
-        context=req.context,
-    )
+    try:
+        result = provider.generate_caption(image_path=req.image_path, style=req.style, context=req.context)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
     return result.to_dict()
 
 
