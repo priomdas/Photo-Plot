@@ -167,7 +167,11 @@ def test_caption_connection(req: CaptionConfigRequest) -> dict[str, Any]:
     try:
         config = req.model_dump()
         if config["provider"] == "rule-based":
-            raise RuntimeError("Choose Gemini or OpenAI-compatible as the online provider")
+            config["provider"] = (
+                "gemini"
+                if "generativelanguage.googleapis.com" in config.get("base_url", "")
+                else "openai-compatible"
+            )
         return test_caption_config(config)
     except (RuntimeError, ValueError) as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

@@ -631,7 +631,12 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                               }}>Save locally</button>
                               <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={async () => {
                                 try {
-                                  const result = await api.testCaptionConnection(captionConfig);
+                                  const result = await api.testCaptionConnection({
+                                    ...captionConfig,
+                                    provider: captionConfig.provider === "openai-compatible"
+                                      ? "openai-compatible"
+                                      : "gemini",
+                                  });
                                   setCaptionConnection({ ok: true, message: `Connected: ${result.model_name}` });
                                 } catch (err) {
                                   setCaptionConnection({ ok: false, message: err.message });
