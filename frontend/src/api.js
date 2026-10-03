@@ -157,11 +157,11 @@ export async function uploadPhotosForPublish(files) {
   return asJson(response);
 }
 
-export function generateCaption({ imagePath = "", style = "professional", context = "", provider = "rule-based" } = {}) {
+export function generateCaption({ imagePath = "", prompt = "", provider = "rule-based" } = {}) {
   return fetch("/api/social/caption/generate", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ image_path: imagePath, style, context, provider }),
+    body: JSON.stringify({ image_path: imagePath, prompt, provider }),
   }).then(asJson);
 }
 

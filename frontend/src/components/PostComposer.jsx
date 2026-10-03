@@ -2,14 +2,6 @@ import React, { useCallback, useEffect, useRef, useState } from "react";
 import * as api from "../api";
 import { Icon } from "./Icon";
 
-const CAPTION_STYLES = [
-  { id: "professional", label: "Professional", icon: "💼" },
-  { id: "casual", label: "Casual", icon: "😎" },
-  { id: "storytelling", label: "Storytelling", icon: "📖" },
-  { id: "minimal", label: "Minimal", icon: "◈" },
-  { id: "engaging", label: "Engaging", icon: "🔥" },
-];
-
 const HASHTAG_CATEGORIES = [
   "photography", "nature", "portrait", "wedding",
   "food", "travel", "product", "event",
@@ -23,7 +15,7 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const [caption, setCaption] = useState("");
   const [hashtags, setHashtags] = useState([]);
   const [hashtagInput, setHashtagInput] = useState("");
-  const [captionStyle, setCaptionStyle] = useState("professional");
+  const [captionPrompt, setCaptionPrompt] = useState("");
   const [hashtagCategory, setHashtagCategory] = useState("photography");
   const [isGeneratingCaption, setIsGeneratingCaption] = useState(false);
   const [isGeneratingHashtags, setIsGeneratingHashtags] = useState(false);
@@ -61,7 +53,6 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const [scheduleDate, setScheduleDate] = useState("");
   const [scheduleTime, setScheduleTime] = useState("");
   const [notification, setNotification] = useState(null);
-  const [contextInput, setContextInput] = useState("");
   const [showHashtagSetSave, setShowHashtagSetSave] = useState(false);
   const [hashtagSetName, setHashtagSetName] = useState("");
   const [folderPath, setFolderPath] = useState("");
@@ -167,13 +158,16 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
 
   // ──── Caption generation ────
   const handleGenerateCaption = async () => {
+    if (!captionPrompt.trim()) {
+      notify("Write a prompt before generating a caption", "error");
+      return;
+    }
     setIsGeneratingCaption(true);
     try {
       const firstPhoto = photos.find((p) => selectedPhotos.has(p.id)) || photos[0];
       const result = await api.generateCaption({
         imagePath: firstPhoto?.path || "",
-        style: captionStyle,
-        context: contextInput,
+        prompt: captionPrompt,
         provider: captionProvider,
       });
       setCaption(result.caption);
@@ -649,32 +643,21 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                       </div>
                     )}
 
-                    {/* Style selector */}
-                    <div className="pc-style-pills">
-                      {CAPTION_STYLES.map((s) => (
-                        <button
-                          key={s.id}
-                          className={`pc-pill ${captionStyle === s.id ? "pc-pill--active" : ""}`}
-                          onClick={() => setCaptionStyle(s.id)}
-                        >
-                          {s.icon} {s.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Optional context */}
-                    <input
-                      className="pc-input"
-                      placeholder="Optional context (e.g., 'wedding shoot at sunset')"
-                      value={contextInput}
-                      onChange={(e) => setContextInput(e.target.value)}
+                    <label className="pc-label" htmlFor="caption-prompt">Caption prompt</label>
+                    <textarea
+                      id="caption-prompt"
+                      className="pc-textarea pc-caption-prompt"
+                      placeholder="Tell the AI exactly what caption to write..."
+                      value={captionPrompt}
+                      onChange={(e) => setCaptionPrompt(e.target.value)}
+                      rows={3}
                     />
 
                     <div className="pc-caption-area">
                       <textarea
                         ref={captionRef}
                         className="pc-textarea"
-                        placeholder="Write your caption here or generate one with AI..."
+                        placeholder="Generated caption will appear here. You can edit it before posting."
                         value={caption}
                         onChange={(e) => setCaption(e.target.value)}
                         rows={5}

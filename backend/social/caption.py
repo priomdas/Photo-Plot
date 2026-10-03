@@ -256,16 +256,7 @@ class LocalCaptionProvider(CaptionProvider):
             from PIL import Image  # type: ignore
             img = Image.open(image_path).convert("RGB")
 
-            prompt_map = {
-                "professional": "Describe this photograph professionally for a social media post. Be concise and elegant.",
-                "casual": "Write a fun, casual Instagram caption for this photo. Keep it short and add an emoji.",
-                "storytelling": "Write a poetic, storytelling caption for this photo. Make it evocative.",
-                "minimal": "Write a very short, minimal caption for this photo. One line only.",
-                "engaging": "Write an engaging social media caption for this photo that encourages comments.",
-            }
-            prompt = prompt_map.get(style, prompt_map["professional"])
-            if context:
-                prompt += f" Context: {context}"
+            prompt = context.strip()
 
             enc_image = self._processor(img, return_tensors="pt").to(self._device)
             caption_text = self._model.generate(
@@ -348,9 +339,9 @@ class OnlineCaptionProvider(CaptionProvider):
         if not self.is_available():
             raise RuntimeError("Online caption provider is not configured")
         prompt = (
-            f"Write one polished social media caption in a {style} style. "
-            "Return only the caption and do not invent visual details. "
-            f"User description: {context or 'Create a versatile photography caption.'}"
+            "Follow the user's prompt exactly and return only the finished social media caption. "
+            "Do not add explanations, style labels, or invented visual details.\n\n"
+            f"User prompt:\n{context}"
         )
         provider = self.config["provider"]
         try:

@@ -48,8 +48,7 @@ MAX_FILE_BYTES = 60 * 1024 * 1024
 
 class GenerateCaptionRequest(BaseModel):
     image_path: str = ""
-    style: str = "professional"
-    context: str = ""
+    prompt: str = ""
     provider: str = "rule-based"
 
 
@@ -180,6 +179,8 @@ def test_caption_connection(req: CaptionConfigRequest) -> dict[str, Any]:
 @router.post("/caption/generate")
 def generate_caption(req: GenerateCaptionRequest) -> dict[str, Any]:
     """Generate a caption for a photo."""
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Write a prompt before generating a caption")
     use_vlm = req.provider == "local-vlm"
     if req.provider == "online":
         provider = OnlineCaptionProvider()
@@ -190,7 +191,7 @@ def generate_caption(req: GenerateCaptionRequest) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail=f"Image not found: {req.image_path}")
 
     try:
-        result = provider.generate_caption(image_path=req.image_path, style=req.style, context=req.context)
+        result = provider.generate_caption(image_path=req.image_path, context=req.prompt.strip())
     except RuntimeError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     return result.to_dict()
