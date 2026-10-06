@@ -7,9 +7,12 @@ const HASHTAG_CATEGORIES = [
   "food", "travel", "product", "event",
 ];
 
-export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab = "compose" }) {
+export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab = "compose", initialVideo = null }) {
   // ──── State ────
   const [activeTab, setActiveTab] = useState("compose"); // compose | drafts | pages | history
+  const [mediaType, setMediaType] = useState("photo"); // photo | reel | video
+  const [videoItem, setVideoItem] = useState(null);
+  const [videoTitle, setVideoTitle] = useState("");
   const [photos, setPhotos] = useState([]);
   const [selectedPhotos, setSelectedPhotos] = useState(new Set());
   const [caption, setCaption] = useState("");
@@ -39,6 +42,16 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const [isConnecting, setIsConnecting] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishProgress, setPublishProgress] = useState(null);
+
+  useEffect(() => {
+    if (initialVideo) {
+      setVideoItem(initialVideo);
+      setMediaType(initialVideo.suggestedType || (initialVideo.aspectRatio === "9:16" ? "reel" : "video"));
+      setVideoTitle(initialVideo.videoName?.replace(/\.[^/.]+$/, "") || "New Video");
+      setCaptionPrompt(`Viral video for social media: ${initialVideo.videoName || ""}`);
+      setActiveTab("compose");
+    }
+  }, [initialVideo]);
 
   useEffect(() => {
     if (isOpen) setActiveTab(initialTab);
@@ -271,45 +284,55 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
 
   // ──── Publishing ────
   const handlePublish = async () => {
-    const targetPhotos = photos.filter(
-      (p) => selectedPhotos.size === 0 || selectedPhotos.has(p.id)
-    );
+    let photoPaths = [];
 
-    if (!targetPhotos.length) {
-      notify("Add at least one photo first", "error");
-      return;
-    }
+    if (mediaType === "photo") {
+      const targetPhotos = photos.filter(
+        (p) => selectedPhotos.size === 0 || selectedPhotos.has(p.id)
+      );
 
-    // Upload any photos that still have no server path
-    const needUpload = targetPhotos.filter((p) => !p.path && p.file);
-    if (needUpload.length > 0) {
-      try {
-        notify("Uploading photos to server...", "info");
-        const result = await api.uploadPhotosForPublish(needUpload.map((p) => p.file));
-        // Update paths in state
-        setPhotos((prev) =>
-          prev.map((p) => {
-            const match = result.photos.find((r) => r.name === p.name);
-            return match ? { ...p, path: match.path } : p;
-          })
-        );
-        // Also update local references
-        for (const tp of targetPhotos) {
-          if (!tp.path) {
-            const match = result.photos.find((r) => r.name === tp.name);
-            if (match) tp.path = match.path;
-          }
-        }
-      } catch (err) {
-        notify(`Photo upload failed: ${err.message}`, "error");
+      if (!targetPhotos.length && publishMode !== "draft") {
+        notify("Add at least one photo first", "error");
         return;
       }
-    }
 
-    const photoPaths = targetPhotos.map((p) => p.path).filter(Boolean);
-    if (!photoPaths.length) {
-      notify("Could not resolve photo paths. Try re-adding photos.", "error");
-      return;
+      // Upload any photos that still have no server path
+      const needUpload = targetPhotos.filter((p) => !p.path && p.file);
+      if (needUpload.length > 0) {
+        try {
+          notify("Uploading photos to server...", "info");
+          const result = await api.uploadPhotosForPublish(needUpload.map((p) => p.file));
+          // Update paths in state
+          setPhotos((prev) =>
+            prev.map((p) => {
+              const match = result.photos.find((r) => r.name === p.name);
+              return match ? { ...p, path: match.path } : p;
+            })
+          );
+          // Also update local references
+          for (const tp of targetPhotos) {
+            if (!tp.path) {
+              const match = result.photos.find((r) => r.name === tp.name);
+              if (match) tp.path = match.path;
+            }
+          }
+        } catch (err) {
+          notify(`Photo upload failed: ${err.message}`, "error");
+          return;
+        }
+      }
+
+      photoPaths = targetPhotos.map((p) => p.path).filter(Boolean);
+      if (!photoPaths.length && publishMode !== "draft") {
+        notify("Could not resolve photo paths. Try re-adding photos.", "error");
+        return;
+      }
+    } else {
+      // Reel or Standard Video
+      if (!videoItem?.videoPath && publishMode !== "draft") {
+        notify("Please export or select a video to publish", "error");
+        return;
+      }
     }
 
     if (publishMode === "draft") {
@@ -352,11 +375,15 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
         caption,
         hashtags,
         photoPaths,
+        videoPath: videoItem ? videoItem.videoPath : "",
+        mediaType,
+        videoTitle,
         scheduledPublishTime: scheduledTime,
       });
+      const totalUnits = mediaType === "photo" ? Math.max(1, photoPaths.length) * selectedPages.length : selectedPages.length;
       setPublishProgress({
         completed: 0,
-        total: photoPaths.length * selectedPages.length,
+        total: totalUnits,
         percent: 0,
         status: "uploading",
       });
@@ -478,59 +505,162 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
           {activeTab === "compose" && (
             <div className="pc-compose">
               <div className="pc-compose__grid">
-                {/* Left column: Photos + Preview */}
+                {/* Left column: Media Selection + Preview */}
                 <div className="pc-compose__left">
-                  {/* Photo Selection */}
-                  <section className="pc-section">
-                    <div className="pc-section__head">
-                      <h3>📸 Photos ({selectedCount} selected)</h3>
-                      <div className="pc-section__actions">
-                        <button className="pc-btn pc-btn--sm" onClick={() => fileInputRef.current?.click()}>
-                          + Add
-                        </button>
-                        <input ref={fileInputRef} type="file" multiple accept="image/*" hidden onChange={handleFileSelect} />
-                        {photos.length > 0 && (
-                          <>
-                            <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={selectAllPhotos}>
-                              {selectedPhotos.size === photos.length ? "Deselect All" : "Select All"}
-                            </button>
-                            {selectedPhotos.size > 0 && (
-                              <button className="pc-btn pc-btn--sm pc-btn--danger" onClick={removeSelectedPhotos}>
-                                Remove
-                              </button>
-                            )}
-                          </>
+                  {/* Media Type Switcher */}
+                  <div className="pc-media-switcher">
+                    <button
+                      className={`pc-media-btn ${mediaType === "photo" ? "is-active" : ""}`}
+                      onClick={() => setMediaType("photo")}
+                    >
+                      📸 Photo Post
+                    </button>
+                    <button
+                      className={`pc-media-btn ${mediaType === "reel" ? "is-active" : ""}`}
+                      onClick={() => setMediaType("reel")}
+                    >
+                      📱 Facebook Reel (9:16)
+                    </button>
+                    <button
+                      className={`pc-media-btn ${mediaType === "video" ? "is-active" : ""}`}
+                      onClick={() => setMediaType("video")}
+                    >
+                      🖥️ Standard Video (16:9)
+                    </button>
+                  </div>
+
+                  {/* Video Selection */}
+                  {mediaType !== "photo" ? (
+                    <section className="pc-section">
+                      <div className="pc-section__head">
+                        <h3>
+                          {mediaType === "reel" ? "📱 Facebook Reel Video" : "🖥️ Standard Facebook Video"}
+                        </h3>
+                        {videoItem && (
+                          <button
+                            className="pc-btn pc-btn--sm pc-btn--danger"
+                            onClick={() => setVideoItem(null)}
+                          >
+                            Remove Video
+                          </button>
                         )}
                       </div>
-                    </div>
-                    {photos.length === 0 ? (
-                      <div className="pc-empty-photos" onClick={() => fileInputRef.current?.click()}>
-                        <span className="pc-empty-photos__icon">🖼️</span>
-                        <p>Click to add photos or load from processed output</p>
-                      </div>
-                    ) : (
-                      <div className="pc-photo-grid">
-                        {photos.map((photo) => (
-                          <div
-                            key={photo.id}
-                            className={`pc-photo-thumb ${selectedPhotos.has(photo.id) ? "pc-photo-thumb--selected" : ""} ${photo.uploading ? "pc-photo-thumb--uploading" : ""}`}
-                            onClick={() => togglePhotoSelection(photo.id)}
-                          >
-                            <img src={photo.thumb} alt={photo.name} loading="lazy" />
-                            {photo.uploading && (
-                              <div className="pc-photo-thumb__uploading">
-                                <span className="pc-spinner" />
-                              </div>
-                            )}
-                            <div className="pc-photo-thumb__check">
-                              {selectedPhotos.has(photo.id) ? "✓" : photo.path ? "✓" : ""}
-                            </div>
-                            <span className="pc-photo-thumb__name">{photo.name}</span>
+                      {videoItem ? (
+                        <div className="pc-video-card">
+                          <video
+                            src={videoItem.streamUrl}
+                            controls
+                            className="pc-video-player"
+                            style={{
+                              width: "100%",
+                              maxHeight: mediaType === "reel" ? "240px" : "180px",
+                              borderRadius: "8px",
+                              background: "#000",
+                            }}
+                          />
+                          <div className="pc-video-card__meta" style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
+                            <span className="badge badge--success">
+                              {mediaType === "reel" ? "9:16 Vertical Reel" : "Landscape/Standard Video"}
+                            </span>
+                            <span style={{ fontSize: "12px", opacity: 0.8 }}>Duration: {Math.round(videoItem.duration || 0)}s</span>
                           </div>
-                        ))}
+                          {mediaType === "video" && (
+                            <div className="pc-field" style={{ marginTop: "10px" }}>
+                              <label className="pc-label">Video Title (Required for Facebook Videos)</label>
+                              <input
+                                className="pc-input"
+                                placeholder="Enter an eye-catching video title..."
+                                value={videoTitle}
+                                onChange={(e) => setVideoTitle(e.target.value)}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="pc-empty-photos" onClick={() => fileInputRef.current?.click()}>
+                          <span className="pc-empty-photos__icon">🎬</span>
+                          <p>No video selected. Upload or export from <b>Video Studio</b>.</p>
+                          <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="video/*"
+                            hidden
+                            onChange={async (e) => {
+                              const f = e.target.files?.[0];
+                              if (!f) return;
+                              try {
+                                notify("Uploading video...", "info");
+                                const meta = await api.uploadVideoClip(f);
+                                setVideoItem({
+                                  videoPath: meta.path,
+                                  videoName: f.name,
+                                  streamUrl: meta.stream_url,
+                                  duration: meta.duration,
+                                  aspectRatio: meta.aspect_ratio,
+                                });
+                                setVideoTitle(f.name.replace(/\.[^/.]+$/, ""));
+                                notify("Video loaded for publishing!", "success");
+                              } catch (err) {
+                                notify(`Upload failed: ${err.message}`, "error");
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+                    </section>
+                  ) : (
+                    /* Photo Selection */
+                    <section className="pc-section">
+                      <div className="pc-section__head">
+                        <h3>📸 Photos ({selectedCount} selected)</h3>
+                        <div className="pc-section__actions">
+                          <button className="pc-btn pc-btn--sm" onClick={() => fileInputRef.current?.click()}>
+                            + Add
+                          </button>
+                          <input ref={fileInputRef} type="file" multiple accept="image/*" hidden onChange={handleFileSelect} />
+                          {photos.length > 0 && (
+                            <>
+                              <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={selectAllPhotos}>
+                                {selectedPhotos.size === photos.length ? "Deselect All" : "Select All"}
+                              </button>
+                              {selectedPhotos.size > 0 && (
+                                <button className="pc-btn pc-btn--sm pc-btn--danger" onClick={removeSelectedPhotos}>
+                                  Remove
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
-                    )}
-                  </section>
+                      {photos.length === 0 ? (
+                        <div className="pc-empty-photos" onClick={() => fileInputRef.current?.click()}>
+                          <span className="pc-empty-photos__icon">🖼️</span>
+                          <p>Click to add photos or load from processed output</p>
+                        </div>
+                      ) : (
+                        <div className="pc-photo-grid">
+                          {photos.map((photo) => (
+                            <div
+                              key={photo.id}
+                              className={`pc-photo-thumb ${selectedPhotos.has(photo.id) ? "pc-photo-thumb--selected" : ""} ${photo.uploading ? "pc-photo-thumb--uploading" : ""}`}
+                              onClick={() => togglePhotoSelection(photo.id)}
+                            >
+                              <img src={photo.thumb} alt={photo.name} loading="lazy" />
+                              {photo.uploading && (
+                                <div className="pc-photo-thumb__uploading">
+                                  <span className="pc-spinner" />
+                                </div>
+                              )}
+                              <div className="pc-photo-thumb__check">
+                                {selectedPhotos.has(photo.id) ? "✓" : photo.path ? "✓" : ""}
+                              </div>
+                              <span className="pc-photo-thumb__name">{photo.name}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </section>
+                  )}
 
                   {/* Post Preview */}
                   <section className="pc-section">
@@ -546,7 +676,9 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                         </div>
                         <div>
                           <strong>{selectedPage?.page_name || "Your Page"}</strong>
-                          <span className="pc-preview__meta">Just now · 🌐</span>
+                          <span className="pc-preview__meta">
+                            Just now · 🌐 {mediaType === "reel" ? "· 📱 Reel" : mediaType === "video" ? "· 🎥 Video" : ""}
+                          </span>
                         </div>
                       </div>
                       {fullPostText && (
@@ -559,6 +691,23 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                           ))}
                         </div>
                       )}
+                      {mediaType !== "photo" && videoItem ? (
+                        <div className="pc-preview__video-wrap" style={{ textAlign: "center", margin: "10px 0" }}>
+                          <video
+                            src={videoItem.streamUrl}
+                            controls
+                            style={{
+                              width: "100%",
+                              maxHeight: mediaType === "reel" ? "320px" : "200px",
+                              borderRadius: "6px",
+                              background: "#000",
+                            }}
+                          />
+                          {mediaType === "video" && videoTitle && (
+                            <h4 style={{ margin: "8px 0 4px", fontSize: "14px", fontWeight: "600" }}>{videoTitle}</h4>
+                          )}
+                        </div>
+                      ) : null}
                       {photos.length > 0 && (
                         <div className={`pc-preview__images pc-preview__images--${Math.min(photos.length, 4)}`}>
                           {photos.slice(0, 4).map((p, i) => (
@@ -866,7 +1015,15 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                     <button
                       className={`pc-btn pc-btn--publish ${publishMode === "draft" ? "pc-btn--secondary" : "pc-btn--accent"}`}
                       onClick={handlePublish}
-                      disabled={isPublishing || (!photos.length && publishMode !== "draft")}
+                      disabled={
+                        isPublishing ||
+                        (publishMode !== "draft" && (
+                          mediaType === "photo"
+                            ? !photos.length
+                            : !videoItem?.videoPath
+                        )) ||
+                        (publishMode !== "draft" && !selectedPages.length)
+                      }
                     >
                       {isPublishing ? (
                         <><span className="pc-spinner" /> {publishProgress ? `Uploading ${publishProgress.completed}/${publishProgress.total} (${publishProgress.percent}%)` : "Starting publish..."}</>

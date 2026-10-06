@@ -26,6 +26,7 @@ from .curation.database import create_curation_job, get_curation_job, update_cur
 from .dng_preset import DEFAULT_ADJUSTMENTS, load_preset_file
 from .processor import process_image
 from .social.routes import router as social_router
+from .video.routes import router as video_router
 
 ROOT = Path(__file__).resolve().parents[1]
 PROCESSED = ROOT / "processed"
@@ -54,6 +55,7 @@ logger = logging.getLogger("photopilot")
 app = FastAPI(title="PhotoPilot Local API", version="0.3.0")
 app.add_middleware(CORSMiddleware, allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"], allow_methods=["*"], allow_headers=["*"])
 app.include_router(social_router)
+app.include_router(video_router)
 
 
 def _load_jobs() -> dict[str, dict[str, Any]]:

@@ -251,3 +251,47 @@ def schedule_post(
             return data
         except httpx.HTTPError as exc:
             raise FacebookPublishError(f"Network error: {exc}") from exc
+
+
+def publish_facebook_reel(
+    page_id: str,
+    page_access_token: str,
+    video_path: str,
+    caption: str = "",
+    scheduled_publish_time: int = 0,
+) -> dict[str, Any]:
+    """Publish a short vertical video to Facebook Page Reels."""
+    from ..video.reels import FacebookVideoError, publish_facebook_reel as _pub_reel
+    try:
+        return _pub_reel(
+            page_id=page_id,
+            page_access_token=page_access_token,
+            video_path=video_path,
+            caption=caption,
+            scheduled_publish_time=scheduled_publish_time,
+        )
+    except FacebookVideoError as exc:
+        raise FacebookPublishError(str(exc)) from exc
+
+
+def publish_standard_video(
+    page_id: str,
+    page_access_token: str,
+    video_path: str,
+    title: str = "",
+    description: str = "",
+    scheduled_publish_time: int = 0,
+) -> dict[str, Any]:
+    """Publish a standard or long-form video to Facebook Page Feed."""
+    from ..video.reels import FacebookVideoError, publish_standard_facebook_video as _pub_video
+    try:
+        return _pub_video(
+            page_id=page_id,
+            page_access_token=page_access_token,
+            video_path=video_path,
+            title=title,
+            description=description,
+            scheduled_publish_time=scheduled_publish_time,
+        )
+    except FacebookVideoError as exc:
+        raise FacebookPublishError(str(exc)) from exc

@@ -29,8 +29,10 @@ from .caption import (
 from .facebook import (
     FacebookPublishError,
     get_managed_pages,
+    publish_facebook_reel,
     publish_multi_photo,
     publish_single_photo,
+    publish_standard_video,
     schedule_post,
     verify_token,
 )
@@ -99,6 +101,9 @@ class PublishRequest(BaseModel):
     caption: str = ""
     hashtags: list[str] = Field(default_factory=list)
     photo_paths: list[str] = Field(default_factory=list)
+    video_path: str = ""
+    media_type: str = "photo"  # "photo" | "reel" | "video"
+    video_title: str = ""
     scheduled_publish_time: int = 0
 
 
@@ -361,13 +366,15 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
         if req.hashtags:
             full_caption += "\n\n" + " ".join(req.hashtags)
 
-        total_work = len(req.photo_paths) * len(pages)
+        is_video = bool(req.video_path or req.media_type in ("reel", "video"))
+        work_units_per_page = 1 if is_video else max(1, len(req.photo_paths))
+        total_work = work_units_per_page * len(pages)
         job["pages"] = {
             page_id: {
                 "page_id": page_id,
                 "page_name": page_data["page_name"],
                 "completed": 0,
-                "total": len(req.photo_paths),
+                "total": work_units_per_page,
                 "percent": 0,
                 "status": "uploading",
             }
@@ -391,35 +398,61 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
                 ) if completed_total else None
 
             try:
-                if req.scheduled_publish_time > 0:
-                    result = schedule_post(
-                        page_id=page_id,
-                        page_access_token=page_data["access_token"],
-                        photo_paths=req.photo_paths,
-                        caption=full_caption,
-                        scheduled_publish_time=req.scheduled_publish_time,
-                    )
-                    status = "scheduled"
-                    page_progress(len(req.photo_paths), len(req.photo_paths))
+                if is_video:
+                    # Video or Reel publish
+                    if req.media_type == "video":
+                        result = publish_standard_video(
+                            page_id=page_id,
+                            page_access_token=page_data["access_token"],
+                            video_path=req.video_path,
+                            title=req.video_title,
+                            description=full_caption,
+                            scheduled_publish_time=req.scheduled_publish_time,
+                        )
+                    else:
+                        # Default is Reel
+                        result = publish_facebook_reel(
+                            page_id=page_id,
+                            page_access_token=page_data["access_token"],
+                            video_path=req.video_path,
+                            caption=full_caption,
+                            scheduled_publish_time=req.scheduled_publish_time,
+                        )
+                    status = "scheduled" if req.scheduled_publish_time > 0 else "published"
+                    page_progress(1, 1)
                 else:
-                    result = publish_multi_photo(
-                        page_id=page_id,
-                        page_access_token=page_data["access_token"],
-                        photo_paths=req.photo_paths,
-                        caption=full_caption,
-                        progress_cb=page_progress,
-                    )
-                    status = "published"
-                    if len(req.photo_paths) == 1:
-                        page_progress(1, 1)
+                    # Photo publish
+                    if req.scheduled_publish_time > 0:
+                        result = schedule_post(
+                            page_id=page_id,
+                            page_access_token=page_data["access_token"],
+                            photo_paths=req.photo_paths,
+                            caption=full_caption,
+                            scheduled_publish_time=req.scheduled_publish_time,
+                        )
+                        status = "scheduled"
+                        page_progress(len(req.photo_paths), len(req.photo_paths))
+                    else:
+                        result = publish_multi_photo(
+                            page_id=page_id,
+                            page_access_token=page_data["access_token"],
+                            photo_paths=req.photo_paths,
+                            caption=full_caption,
+                            progress_cb=page_progress,
+                        )
+                        status = "published"
+                        if len(req.photo_paths) == 1:
+                            page_progress(1, 1)
+
                 job["pages"][page_id]["status"] = status
                 return page_id, result, status, ""
             except FacebookPublishError as exc:
                 job["pages"][page_id]["status"] = "failed"
                 job["pages"][page_id]["error"] = str(exc)
-                page_progress(len(req.photo_paths), len(req.photo_paths))
+                page_progress(work_units_per_page, work_units_per_page)
                 return page_id, None, "failed", str(exc)
 
+        media_paths = req.photo_paths if not is_video else ([req.video_path] if req.video_path else [])
         results = []
         errors = []
         with ThreadPoolExecutor(max_workers=len(pages)) as executor:
@@ -440,7 +473,7 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
                         error=error,
                         caption=req.caption,
                         hashtags=req.hashtags,
-                        photo_paths=req.photo_paths,
+                        photo_paths=media_paths,
                         status="failed",
                     )
                 else:
@@ -451,7 +484,7 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
                         page_name=page_data["page_name"],
                         caption=req.caption,
                         hashtags=req.hashtags,
-                        photo_paths=req.photo_paths,
+                        photo_paths=media_paths,
                         status=status,
                     )
                     results.append({**record, "fb_result": result})
@@ -468,13 +501,14 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
         )
     except FacebookPublishError as exc:
         publish_jobs[job_id].update(status="failed", error=str(exc))
+        media_paths = req.photo_paths if not is_video else ([req.video_path] if req.video_path else [])
         db.record_published_post(
             draft_id=req.draft_id,
             page_id=req.page_id,
             error=str(exc),
             caption=req.caption,
             hashtags=req.hashtags,
-            photo_paths=req.photo_paths,
+            photo_paths=media_paths,
             status="failed",
         )
     except Exception as exc:
@@ -486,16 +520,22 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
 def publish_post(req: PublishRequest, background_tasks: BackgroundTasks) -> dict[str, str]:
     """Start a publish job and return immediately so the UI can show progress."""
     page_ids = list(dict.fromkeys(req.page_ids or ([req.page_id] if req.page_id else [])))
-    if not req.photo_paths:
-        raise HTTPException(status_code=400, detail="At least one photo is required")
     if not page_ids:
         raise HTTPException(status_code=400, detail="At least one Facebook Page is required")
+
+    is_video = bool(req.video_path or req.media_type in ("reel", "video"))
+    if not is_video and not req.photo_paths:
+        raise HTTPException(status_code=400, detail="At least one photo is required")
+    if is_video and not req.video_path:
+        raise HTTPException(status_code=400, detail="Video file path is required")
+
     req.page_ids = page_ids
     job_id = uuid4().hex
+    work_units_per_page = 1 if is_video else max(1, len(req.photo_paths))
     publish_jobs[job_id] = {
         "status": "uploading",
         "completed": 0,
-        "total": len(req.photo_paths) * len(page_ids),
+        "total": work_units_per_page * len(page_ids),
         "percent": 0,
         "started_at": time.time(),
         "elapsed_seconds": 0,

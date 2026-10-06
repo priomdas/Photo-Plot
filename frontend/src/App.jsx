@@ -7,6 +7,7 @@ import { CanvasStage } from "./components/CanvasStage";
 import { ControlPanel } from "./components/ControlPanel";
 import { CurationModal } from "./components/CurationModal";
 import { PostComposer } from "./components/PostComposer";
+import { VideoStudio } from "./components/video/VideoStudio";
 import { Icon } from "./components/Icon";
 
 const INITIAL_PRESET = {
@@ -56,8 +57,10 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [theme, setTheme] = useState(() => localStorage.getItem("pp-theme") || "dark");
   const [curationOpen, setCurationOpen] = useState(false);
+  const [appMode, setAppMode] = useState("photos"); // photos | videos
   const [composerOpen, setComposerOpen] = useState(false);
   const [composerTab, setComposerTab] = useState("compose");
+  const [composerVideo, setComposerVideo] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const toasts = useToasts();
   const pollRef = useRef(null);
@@ -320,8 +323,11 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
 
   const isGpuActive = deviceMode === "gpu" || (deviceMode === "auto" && gpu?.available);
   const currentPreset = filePresets[selected] || INITIAL_PRESET;
-  const openComposer = (tab = "compose") => {
+  const openComposer = (tab = "compose", videoData = null) => {
     setComposerTab(tab);
+    if (videoData) {
+      setComposerVideo(videoData);
+    }
     setComposerOpen(true);
     setSettingsOpen(false);
   };
@@ -335,6 +341,26 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
             <h1 className="brand__name">PhotoPilot</h1>
             <p className="brand__tag">Lightroom-grade photo studio · local & fast</p>
           </div>
+        </div>
+
+        {/* Studio Mode Switcher (Photos vs Videos & Reels) */}
+        <div className="topbar__mode-switch">
+          <button
+            className={`topbar__mode-tab ${appMode === "photos" ? "topbar__mode-tab--active" : ""}`}
+            onClick={() => setAppMode("photos")}
+            title="Batch photo editing, raw presets & watermark"
+          >
+            <span>📷</span>
+            <span>Photos Studio</span>
+          </button>
+          <button
+            className={`topbar__mode-tab ${appMode === "videos" ? "topbar__mode-tab--active" : ""}`}
+            onClick={() => setAppMode("videos")}
+            title="CapCut-style video trimmer, merger, filters, audio mixer & Facebook Reels"
+          >
+            <span>🎬</span>
+            <span>Videos & Reels</span>
+          </button>
         </div>
 
         <div className="topbar__actions">
@@ -407,103 +433,111 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
         </div>
       </header>
 
-      <div className="workspace">
-        <aside className="workspace__left">
-          <UploadTray
-            files={files}
-            selected={selected}
-            onFiles={addFiles}
-            onSelect={setSelected}
-            onRemove={removeFile}
-          />
-        </aside>
+      {appMode === "photos" ? (
+        <div className="workspace">
+          <aside className="workspace__left">
+            <UploadTray
+              files={files}
+              selected={selected}
+              onFiles={addFiles}
+              onSelect={setSelected}
+              onRemove={removeFile}
+            />
+          </aside>
 
-        <main className="workspace__center">
-          <CanvasStage
-            file={files[selected]}
-            logo={logo}
-            preset={currentPreset}
-            onUpdate={update}
-          />
+          <main className="workspace__center">
+            <CanvasStage
+              file={files[selected]}
+              logo={logo}
+              preset={currentPreset}
+              onUpdate={update}
+            />
 
-          <div className="actionbar">
-            <button
-              className="btn btn--primary"
-              onClick={process}
-              disabled={busy || !files.length}
-            >
-              {busy && job
-                ? `Processing ${job.completed}/${job.total}…`
-                : `Process ${files.length || ""} photo${files.length === 1 ? "" : "s"}`}
-            </button>
-            <button
-              className="btn btn--ghost"
-              onClick={() => api.openFolder().catch(() => toasts.error("Windows only."))}
-            >
-              Open output folder
-            </button>
-          </div>
+            <div className="actionbar">
+              <button
+                className="btn btn--primary"
+                onClick={process}
+                disabled={busy || !files.length}
+              >
+                {busy && job
+                  ? `Processing ${job.completed}/${job.total}…`
+                  : `Process ${files.length || ""} photo${files.length === 1 ? "" : "s"}`}
+              </button>
+              <button
+                className="btn btn--ghost"
+                onClick={() => api.openFolder().catch(() => toasts.error("Windows only."))}
+              >
+                Open output folder
+              </button>
+            </div>
 
-          {job && (
-            <section className="progress-card">
-              <div className="progress-card__head">
-                <span>
-                  {job.status === "complete" ? "Complete" : "Working"} · {job.completed}/{job.total}
-                  {job.device_used && ` · Device: ${job.device_used}`}
-                </span>
-              </div>
-              <div className="progressbar">
-                <div
-                  className="progressbar__fill"
-                  style={{ width: `${job.total ? (job.completed / job.total) * 100 : 0}%` }}
-                />
-              </div>
-              {job.files?.length > 0 && (
-                <div className="result-links">
-                  {job.files.map((f) => (
-                    <a key={f.url} href={f.url} target="_blank" rel="noreferrer">
-                      {f.name}
-                    </a>
-                  ))}
+            {job && (
+              <section className="progress-card">
+                <div className="progress-card__head">
+                  <span>
+                    {job.status === "complete" ? "Complete" : "Working"} · {job.completed}/{job.total}
+                    {job.device_used && ` · Device: ${job.device_used}`}
+                  </span>
                 </div>
-              )}
-              {job.status === "complete" && job.files?.length > 0 && (
-                <button
-                  className="btn btn--secondary btn--sm"
-                  onClick={() => setComposerOpen(true)}
-                >
-                  <Icon name="edit" size={14} /> Open processed photos in Post Composer
-                </button>
-              )}
-              {job.errors?.map((e) => (
-                <p className="progress-card__error" key={e.name}>
-                  {e.name}: {e.error}
-                </p>
-              ))}
-            </section>
-          )}
-        </main>
+                <div className="progressbar">
+                  <div
+                    className="progressbar__fill"
+                    style={{ width: `${job.total ? (job.completed / job.total) * 100 : 0}%` }}
+                  />
+                </div>
+                {job.files?.length > 0 && (
+                  <div className="result-links">
+                    {job.files.map((f) => (
+                      <a key={f.url} href={f.url} target="_blank" rel="noreferrer">
+                        {f.name}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                {job.status === "complete" && job.files?.length > 0 && (
+                  <button
+                    className="btn btn--secondary btn--sm"
+                    onClick={() => openComposer("compose")}
+                  >
+                    <Icon name="edit" size={14} /> Open processed photos in Post Composer
+                  </button>
+                )}
+                {job.errors?.map((e) => (
+                  <p className="progress-card__error" key={e.name}>
+                    {e.name}: {e.error}
+                  </p>
+                ))}
+              </section>
+            )}
+          </main>
 
-        <aside className="workspace__right">
-          <ControlPanel
-            preset={currentPreset}
-            onUpdate={update}
-            onAdjust={adjust}
-            onApplyToAll={applyAdjustmentGroupToAll}
-            logo={logo}
-            onLogo={setLogo}
-            presets={presets}
-            onLoadPreset={handleLoadPreset}
-            onSavePreset={saveThePreset}
-            onDeletePreset={deleteThePreset}
-            onImportPreset={handleImportPreset}
-            canUndo={historyIndex > 0}
-            canRedo={historyIndex < history.length - 1}
-            onUndo={undo}
-            onRedo={redo}
-          />
-        </aside>
-      </div>
+          <aside className="workspace__right">
+            <ControlPanel
+              preset={currentPreset}
+              onUpdate={update}
+              onAdjust={adjust}
+              onApplyToAll={applyAdjustmentGroupToAll}
+              logo={logo}
+              onLogo={setLogo}
+              presets={presets}
+              onLoadPreset={handleLoadPreset}
+              onSavePreset={saveThePreset}
+              onDeletePreset={deleteThePreset}
+              onImportPreset={handleImportPreset}
+              canUndo={historyIndex > 0}
+              canRedo={historyIndex < history.length - 1}
+              onUndo={undo}
+              onRedo={redo}
+            />
+          </aside>
+        </div>
+      ) : (
+        <VideoStudio
+          onOpenComposer={(videoData) => openComposer("compose", videoData)}
+          notify={(msg, tone) => toasts.show(msg, tone)}
+          globalLogo={logo}
+        />
+      )}
 
       <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />
 
@@ -522,6 +556,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
         onClose={() => setComposerOpen(false)}
         processedPhotos={processedPhotos}
         initialTab={composerTab}
+        initialVideo={composerVideo}
       />
     </div>
   );

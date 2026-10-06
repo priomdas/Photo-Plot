@@ -254,7 +254,18 @@ export function disconnectFacebookPage(pageId) {
 }
 
 // Publishing
-export function publishPost({ draftId = "", pageId = "", pageIds = [], caption, hashtags = [], photoPaths = [], scheduledPublishTime = 0 }) {
+export function publishPost({
+  draftId = "",
+  pageId = "",
+  pageIds = [],
+  caption,
+  hashtags = [],
+  photoPaths = [],
+  videoPath = "",
+  mediaType = "photo",
+  videoTitle = "",
+  scheduledPublishTime = 0,
+}) {
   return fetch("/api/social/publish", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -265,6 +276,9 @@ export function publishPost({ draftId = "", pageId = "", pageIds = [], caption, 
       caption,
       hashtags,
       photo_paths: photoPaths,
+      video_path: videoPath,
+      media_type: mediaType,
+      video_title: videoTitle,
       scheduled_publish_time: scheduledPublishTime,
     }),
   }).then(asJson);
@@ -276,4 +290,146 @@ export function getPublishProgress(jobId) {
 
 export function getPublishHistory(limit = 50) {
   return fetch(`/api/social/history?limit=${limit}`).then(asJson);
+}
+
+// ============================================
+// Video Studio & Reels API
+// ============================================
+
+export function uploadVideoClip(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const data = new FormData();
+    data.append("file", file);
+
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent, e.loaded, e.total);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          resolve(json);
+        } catch {
+          resolve(xhr.responseText);
+        }
+      } else {
+        let detail = xhr.statusText;
+        try {
+          const json = JSON.parse(xhr.responseText);
+          detail = json.detail || detail;
+        } catch {
+          /* ignore */
+        }
+        reject(new Error(detail || `Upload failed (${xhr.status})`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during video upload. Please check backend connection."));
+    xhr.ontimeout = () => reject(new Error("Video upload timed out."));
+    xhr.timeout = 600000; // 10 minutes
+
+    xhr.open("POST", "/api/video/upload-clip", true);
+    xhr.send(data);
+  });
+}
+
+export function uploadAudioTrack(file, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    const data = new FormData();
+    data.append("file", file);
+
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const percent = Math.round((e.loaded / e.total) * 100);
+          onProgress(percent, e.loaded, e.total);
+        }
+      };
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const json = JSON.parse(xhr.responseText);
+          resolve(json);
+        } catch {
+          resolve(xhr.responseText);
+        }
+      } else {
+        let detail = xhr.statusText;
+        try {
+          const json = JSON.parse(xhr.responseText);
+          detail = json.detail || detail;
+        } catch {
+          /* ignore */
+        }
+        reject(new Error(detail || `Upload failed (${xhr.status})`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error("Network error during audio upload."));
+    xhr.ontimeout = () => reject(new Error("Audio upload timed out."));
+    xhr.timeout = 300000;
+
+    xhr.open("POST", "/api/video/upload-audio", true);
+    xhr.send(data);
+  });
+}
+
+export function extractAudioFromClip(videoPath) {
+  return fetch("/api/video/extract-audio", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ video_path: videoPath }),
+  }).then(asJson);
+}
+
+export function probeMedia(path) {
+  return fetch(`/api/video/probe?path=${encodeURIComponent(path)}`, { method: "POST" }).then(asJson);
+}
+
+export function renderVideoProject({
+  clips = [],
+  transitions = [],
+  aspectRatio = "9:16",
+  targetResolution = "1080p",
+  muteOriginalAudio = false,
+  bgmAudioPath = "",
+  bgmVolume = 1.0,
+  originalAudioVolume = 1.0,
+  adjustments = {},
+  lutPreset = "none",
+  logoPath = "",
+  logoSettings = {},
+} = {}) {
+  return fetch("/api/video/render", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      clips,
+      transitions,
+      aspect_ratio: aspectRatio,
+      target_resolution: targetResolution,
+      mute_original_audio: muteOriginalAudio,
+      bgm_audio_path: bgmAudioPath,
+      bgm_volume: bgmVolume,
+      original_audio_volume: originalAudioVolume,
+      adjustments,
+      lut_preset: lutPreset,
+      logo_path: logoPath,
+      logo_settings: logoSettings,
+    }),
+  }).then(asJson);
+}
+
+export function getRenderProgress(jobId) {
+  return fetch(`/api/video/render/progress/${jobId}`).then(asJson);
 }

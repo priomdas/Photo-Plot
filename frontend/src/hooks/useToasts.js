@@ -22,6 +22,7 @@ export function useToasts() {
   return {
     toasts,
     dismiss,
+    show: (m, tone = "info", ttl) => push(m, tone, ttl),
     info: (m, ttl) => push(m, "info", ttl),
     success: (m, ttl) => push(m, "success", ttl),
     error: (m, ttl) => push(m, "error", ttl ?? 6000),
