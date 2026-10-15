@@ -9,6 +9,7 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 CONCAT_ROOT = ROOT / "Video edit" / "Video Edit"
+CONCAT_WORKSPACE = CONCAT_ROOT / "src"
 PROJECTS_ROOT = ROOT / "jobs" / "concat_projects"
 PROJECTS_ROOT.mkdir(parents=True, exist_ok=True)
 
@@ -41,6 +42,10 @@ def _candidate_paths() -> list[Path]:
             CONCAT_ROOT / "target" / "debug" / "concat-cli.exe",
             CONCAT_ROOT / "target" / "release" / "concat-cli",
             CONCAT_ROOT / "target" / "debug" / "concat-cli",
+            CONCAT_WORKSPACE / "target" / "release" / "concat-cli.exe",
+            CONCAT_WORKSPACE / "target" / "debug" / "concat-cli.exe",
+            CONCAT_WORKSPACE / "target" / "release" / "concat-cli",
+            CONCAT_WORKSPACE / "target" / "debug" / "concat-cli",
         ]
     )
     return candidates
@@ -76,7 +81,7 @@ def call_concat(method: str, params: dict[str, Any] | None = None) -> dict[str, 
     request = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}}
     completed = subprocess.run(
         [str(binary), "api", json.dumps(request)],
-        cwd=str(CONCAT_ROOT),
+        cwd=str(CONCAT_WORKSPACE),
         capture_output=True,
         text=True,
         timeout=300,

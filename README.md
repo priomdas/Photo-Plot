@@ -101,9 +101,9 @@ Open **Post Composer → AI settings** to choose the offline generator, local vi
 The old PhotoPilot video editor has been replaced by an adapter for the local Concat engine in `Video edit/Video Edit/`. Build its CLI from that folder:
 
 ```powershell
-cd "Video edit\Video Edit"
+cd "Video edit\Video Edit\src"
 cargo build --release -p concat-cli
-cd ..\..
+cd ..\..\..
 ```
 
 Then restart the backend and open **Video Studio**. The adapter uses Concat's API for project creation, clip import, and effect discovery. If Cargo is not installed, PhotoPilot continues to work for photos and shows the exact video setup message instead of failing silently. Set `PHOTOPILOT_CONCAT_CLI` when the binary is built in a custom location.
