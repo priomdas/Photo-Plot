@@ -1,4 +1,6 @@
 .venv/
+Video edit/Video Edit/target/
+jobs/concat_projects/
 __pycache__/
 *.py[cod]
 

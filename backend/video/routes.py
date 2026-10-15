@@ -15,6 +15,7 @@ from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .ffmpeg_utils import extract_audio, probe_media, render_project
+from .concat_bridge import call_concat, engine_status
 
 logger = logging.getLogger("photopilot.video.routes")
 router = APIRouter(prefix="/api/video", tags=["video"])
@@ -58,6 +59,11 @@ class RenderProjectRequest(BaseModel):
 
 class ExtractAudioRequest(BaseModel):
     video_path: str
+
+
+class ConcatCallRequest(BaseModel):
+    method: str
+    params: dict[str, Any] = Field(default_factory=dict)
 
 
 # ──────── Background Worker ────────
@@ -124,6 +130,18 @@ def _execute_render(job_id: str, req: RenderProjectRequest) -> None:
 
 
 # ──────── Endpoints ────────
+
+@router.get("/concat/status")
+def concat_engine_status() -> dict[str, Any]:
+    return engine_status()
+
+
+@router.post("/concat/call")
+def concat_engine_call(req: ConcatCallRequest) -> dict[str, Any]:
+    try:
+        return call_concat(req.method, req.params)
+    except (RuntimeError, ValueError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 @router.post("/upload-clip")
 def upload_video_clip(file: UploadFile = File(...)) -> dict[str, Any]:

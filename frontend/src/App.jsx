@@ -7,7 +7,7 @@ import { CanvasStage } from "./components/CanvasStage";
 import { ControlPanel } from "./components/ControlPanel";
 import { CurationModal } from "./components/CurationModal";
 import { PostComposer } from "./components/PostComposer";
-import { VideoStudio } from "./components/video/VideoStudio";
+import { ConcatVideoStudio } from "./components/video/ConcatVideoStudio";
 import { Icon } from "./components/Icon";
 
 const INITIAL_PRESET = {
@@ -343,7 +343,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
           </div>
         </div>
 
-        {/* Studio Mode Switcher (Photos vs Videos & Reels) */}
+        {/* Studio Mode Switcher */}
         <div className="topbar__mode-switch">
           <button
             className={`topbar__mode-tab ${appMode === "photos" ? "topbar__mode-tab--active" : ""}`}
@@ -356,10 +356,10 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
           <button
             className={`topbar__mode-tab ${appMode === "videos" ? "topbar__mode-tab--active" : ""}`}
             onClick={() => setAppMode("videos")}
-            title="CapCut-style video trimmer, merger, filters, audio mixer & Facebook Reels"
+            title="Concat-powered video editing"
           >
-            <span>🎬</span>
-            <span>Videos & Reels</span>
+            <Icon name="film" size={15} />
+            <span>Video Studio</span>
           </button>
         </div>
 
@@ -532,11 +532,7 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
           </aside>
         </div>
       ) : (
-        <VideoStudio
-          onOpenComposer={(videoData) => openComposer("compose", videoData)}
-          notify={(msg, tone) => toasts.show(msg, tone)}
-          globalLogo={logo}
-        />
+        <ConcatVideoStudio notify={(msg, tone) => toasts.show(msg, tone)} />
       )}
 
       <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />

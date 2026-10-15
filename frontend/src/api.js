@@ -433,3 +433,15 @@ export function renderVideoProject({
 export function getRenderProgress(jobId) {
   return fetch(`/api/video/render/progress/${jobId}`).then(asJson);
 }
+
+export function getConcatEngineStatus() {
+  return fetch("/api/video/concat/status").then(asJson);
+}
+
+export function callConcatEngine(method, params = {}) {
+  return fetch("/api/video/concat/call", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ method, params }),
+  }).then(asJson);
+}

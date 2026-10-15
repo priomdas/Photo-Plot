@@ -13,6 +13,7 @@ PhotoPilot is a local React + FastAPI photo studio for batch editing, RAW/DNG pr
 - Folder curation through the in-app **Browse Folder** picker, or direct browser file upload.
 - Facebook Post Composer with captions, hashtags, saved hashtag sets, drafts, multiple Page connections, multi-Page publishing, scheduling, publishing history, and upload progress/ETA.
 - Caption AI settings with offline generation plus optional text-only Gemini or OpenAI-compatible providers, connection testing, and local API-key storage.
+- Concat-powered local video workspace for project creation, clip import, effects catalogue access, and future timeline/export integration.
 
 All image processing runs locally. Facebook publishing is the only feature that sends data to Facebook's Graph API.
 
@@ -34,6 +35,7 @@ Optional:
 - Git, only if you are cloning or updating the project from GitHub.
 - An NVIDIA/CUDA-compatible GPU and a matching PyTorch installation. CPU mode works without a GPU.
 - A Facebook Page and valid Page/User Access Token, only if Facebook publishing is needed.
+- Rust/Cargo and the native dependencies required by the bundled Concat engine, only for video editing.
 
 ## Windows setup
 
@@ -93,6 +95,18 @@ Facebook tokens are stored only in the local ignored database. A new computer mu
 ### Caption AI providers
 
 Open **Post Composer → AI settings** to choose the offline generator, local vision model, or an online text-only provider. Online mode supports Google Gemini and OpenAI-compatible endpoints. Enter the model, API key, and endpoint, then click **Test connection** and **Save locally**. The key is stored in the ignored `logs/caption_ai.json` file and is never sent to the frontend or committed to GitHub. Online mode uses the written context/prompt; it does not upload the selected photo.
+
+### Video Studio
+
+The old PhotoPilot video editor has been replaced by an adapter for the local Concat engine in `Video edit/Video Edit/`. Build its CLI from that folder:
+
+```powershell
+cd "Video edit\Video Edit"
+cargo build --release -p concat-cli
+cd ..\..
+```
+
+Then restart the backend and open **Video Studio**. The adapter uses Concat's API for project creation, clip import, and effect discovery. If Cargo is not installed, PhotoPilot continues to work for photos and shows the exact video setup message instead of failing silently. Set `PHOTOPILOT_CONCAT_CLI` when the binary is built in a custom location.
 
 ## Checks
 
