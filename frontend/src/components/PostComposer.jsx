@@ -42,6 +42,8 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const [isConnecting, setIsConnecting] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishProgress, setPublishProgress] = useState(null);
+  const [activeJobId, setActiveJobId] = useState(null);
+  const cancelRequestedRef = useRef(false);
 
   useEffect(() => {
     if (initialVideo) {
@@ -380,6 +382,8 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
         videoTitle,
         scheduledPublishTime: scheduledTime,
       });
+      setActiveJobId(job_id);
+      cancelRequestedRef.current = false;
       const totalUnits = mediaType === "photo" ? Math.max(1, photoPaths.length) * selectedPages.length : selectedPages.length;
       setPublishProgress({
         completed: 0,
@@ -390,8 +394,16 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
       await new Promise((resolve, reject) => {
         const started = Date.now();
         const poll = async () => {
+          if (cancelRequestedRef.current) {
+            reject(new Error("Publishing was cancelled by user"));
+            return;
+          }
           try {
             const progress = await api.getPublishProgress(job_id);
+            if (cancelRequestedRef.current || progress.status === "cancelled") {
+              reject(new Error("Publishing was cancelled by user"));
+              return;
+            }
             setPublishProgress(progress);
             if (progress.status === "complete") {
               setHistory(await api.getPublishHistory());
@@ -417,10 +429,29 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
         poll();
       });
     } catch (err) {
-      notify(`Publishing failed: ${err.message}`, "error");
+      if (!cancelRequestedRef.current) {
+        notify(`Publishing failed: ${err.message}`, "error");
+      }
     }
     setIsPublishing(false);
     setPublishProgress(null);
+    setActiveJobId(null);
+    cancelRequestedRef.current = false;
+  };
+
+  const handleCancelPublish = async () => {
+    cancelRequestedRef.current = true;
+    if (activeJobId) {
+      try {
+        await api.cancelPublish(activeJobId);
+      } catch (err) {
+        // ignore error
+      }
+    }
+    notify("Upload cancelled", "info");
+    setIsPublishing(false);
+    setPublishProgress(null);
+    setActiveJobId(null);
   };
 
   // ──── Load draft ────
@@ -453,6 +484,9 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
   const fullPostText = caption + (hashtags.length ? "\n\n" + hashtags.join(" ") : "");
   const charCount = fullPostText.length;
   const selectedCount = selectedPhotos.size || photos.length;
+  const activePhotos = selectedPhotos.size > 0
+    ? photos.filter((p) => selectedPhotos.has(p.id))
+    : photos;
 
   if (!isOpen) return null;
 
@@ -504,82 +538,86 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
           {/* ═══════ COMPOSE TAB ═══════ */}
           {activeTab === "compose" && (
             <div className="pc-compose">
-              <div className="pc-compose__grid">
-                {/* Left column: Media Selection + Preview */}
-                <div className="pc-compose__left">
-                  {/* Media Type Switcher */}
-                  <div className="pc-media-switcher">
-                    <button
-                      className={`pc-media-btn ${mediaType === "photo" ? "is-active" : ""}`}
-                      onClick={() => setMediaType("photo")}
-                    >
-                      📸 Photo Post
-                    </button>
-                    <button
-                      className={`pc-media-btn ${mediaType === "reel" ? "is-active" : ""}`}
-                      onClick={() => setMediaType("reel")}
-                    >
-                      📱 Facebook Reel (9:16)
-                    </button>
-                    <button
-                      className={`pc-media-btn ${mediaType === "video" ? "is-active" : ""}`}
-                      onClick={() => setMediaType("video")}
-                    >
-                      🖥️ Standard Video (16:9)
-                    </button>
+              <div className="pc-compose__3col">
+                {/* Column 1: Post Type Navigation */}
+                <aside className="pc-type-sidebar">
+                  <h3 className="pc-type-sidebar__title">
+                    <Icon name="layers" size={16} /> Create Post
+                  </h3>
+                  <div className="pc-type-nav">
+                    {[
+                      { id: "photo", label: "Photo Post", icon: "brand", desc: "Single or multi-photo" },
+                      { id: "reel", label: "Facebook Reel", icon: "film", desc: "9:16 vertical short video" },
+                      { id: "video", label: "Standard Video", icon: "film", desc: "16:9 widescreen video" },
+                      { id: "story", label: "Story (9:16)", icon: "sparkle", desc: "24-hour vertical story" },
+                    ].map((type) => {
+                      const isActive = mediaType === type.id || (type.id === "reel" && mediaType === "reel");
+                      return (
+                        <button
+                          key={type.id}
+                          className={`pc-type-card ${isActive ? "pc-type-card--active" : ""}`}
+                          onClick={() => setMediaType(type.id === "story" ? "reel" : type.id)}
+                        >
+                          <div className="pc-type-card__icon">
+                            <Icon name={type.icon} size={18} />
+                          </div>
+                          <div className="pc-type-card__text">
+                            <span className="pc-type-card__name">{type.label}</span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </aside>
+
+                {/* Column 2: Center Editor */}
+                <main className="pc-editor-col">
+                  {/* Editor Header */}
+                  <div className="pc-editor-head">
+                    <h2>
+                      Create {mediaType === "reel" ? "Facebook Reel" : mediaType === "video" ? "Standard Video" : "Photo Post"}
+                    </h2>
+                    {pages.length > 0 && (
+                      <details className="pc-page-dropdown">
+                        <summary className="pc-platform-btn">
+                          <span>🌐 Change Platform ▾</span>
+                        </summary>
+                        <div className="pc-page-dropdown__menu">
+                          {pages.map((pg) => {
+                            const checked = selectedPages.some((selected) => selected.page_id === pg.page_id);
+                            return (
+                              <label key={pg.page_id} className="pc-page-checkbox">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  onChange={() => setSelectedPages((prev) =>
+                                    checked
+                                      ? prev.filter((selected) => selected.page_id !== pg.page_id)
+                                      : [...prev, pg]
+                                  )}
+                                />
+                                <span>{pg.page_name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    )}
                   </div>
 
-                  {/* Video Selection */}
+                  {/* Media Drop & Selector Card */}
                   {mediaType !== "photo" ? (
-                    <section className="pc-section">
-                      <div className="pc-section__head">
-                        <h3>
-                          {mediaType === "reel" ? "📱 Facebook Reel Video" : "🖥️ Standard Facebook Video"}
-                        </h3>
-                        {videoItem && (
-                          <button
-                            className="pc-btn pc-btn--sm pc-btn--danger"
-                            onClick={() => setVideoItem(null)}
-                          >
-                            Remove Video
-                          </button>
-                        )}
-                      </div>
-                      {videoItem ? (
-                        <div className="pc-video-card">
-                          <video
-                            src={videoItem.streamUrl}
-                            controls
-                            className="pc-video-player"
-                            style={{
-                              width: "100%",
-                              maxHeight: mediaType === "reel" ? "240px" : "180px",
-                              borderRadius: "8px",
-                              background: "#000",
-                            }}
-                          />
-                          <div className="pc-video-card__meta" style={{ display: "flex", justifyContent: "space-between", marginTop: "8px" }}>
-                            <span className="badge badge--success">
-                              {mediaType === "reel" ? "9:16 Vertical Reel" : "Landscape/Standard Video"}
-                            </span>
-                            <span style={{ fontSize: "12px", opacity: 0.8 }}>Duration: {Math.round(videoItem.duration || 0)}s</span>
+                    <div className="pc-media-box">
+                      {!videoItem ? (
+                        <div className="pc-dropcard" onClick={() => fileInputRef.current?.click()}>
+                          <div className="pc-dropcard__icon-wrap">
+                            <Icon name="film" size={32} />
                           </div>
-                          {mediaType === "video" && (
-                            <div className="pc-field" style={{ marginTop: "10px" }}>
-                              <label className="pc-label">Video Title (Required for Facebook Videos)</label>
-                              <input
-                                className="pc-input"
-                                placeholder="Enter an eye-catching video title..."
-                                value={videoTitle}
-                                onChange={(e) => setVideoTitle(e.target.value)}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="pc-empty-photos" onClick={() => fileInputRef.current?.click()}>
-                          <span className="pc-empty-photos__icon">🎬</span>
-                          <p>No video selected. Upload or export from <b>Video Studio</b>.</p>
+                          <h4>Upload video or select from Video Studio</h4>
+                          <p>MP4, MOV, WebM (max 1GB)</p>
+                          <button className="btn btn--primary pc-dropcard__btn">
+                            Select Video
+                          </button>
                           <input
                             ref={fileInputRef}
                             type="file"
@@ -606,468 +644,497 @@ export function PostComposer({ isOpen, onClose, processedPhotos = [], initialTab
                             }}
                           />
                         </div>
+                      ) : (
+                        <div className="pc-loaded-media-strip">
+                          <div className="pc-loaded-media-thumb">
+                            <video src={videoItem.streamUrl} />
+                            <span className="pc-play-icon">▶</span>
+                          </div>
+                          <div className="pc-loaded-media-info">
+                            <span className="pc-loaded-media-title">{videoTitle || videoItem.videoName}</span>
+                            <span className="pc-loaded-media-meta">Duration: {Math.round(videoItem.duration || 0)}s</span>
+                          </div>
+                          <button className="icon-btn" onClick={() => setVideoItem(null)} title="Remove video">✕</button>
+                        </div>
                       )}
-                    </section>
+                    </div>
                   ) : (
-                    /* Photo Selection */
-                    <section className="pc-section">
-                      <div className="pc-section__head">
-                        <h3>📸 Photos ({selectedCount} selected)</h3>
-                        <div className="pc-section__actions">
-                          <button className="pc-btn pc-btn--sm" onClick={() => fileInputRef.current?.click()}>
-                            + Add
+                    <div className="pc-media-box">
+                      {photos.length === 0 ? (
+                        <div className="pc-dropcard" onClick={() => fileInputRef.current?.click()}>
+                          <div className="pc-dropcard__icon-wrap">
+                            <Icon name="brand" size={32} />
+                          </div>
+                          <h4>Upload photos or select from workspace</h4>
+                          <p>JPG, PNG, WebP (up to 50 photos)</p>
+                          <button className="btn btn--primary pc-dropcard__btn">
+                            Select Photos
                           </button>
                           <input ref={fileInputRef} type="file" multiple accept="image/*" hidden onChange={handleFileSelect} />
-                          {photos.length > 0 && (
-                            <>
-                              <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={selectAllPhotos}>
-                                {selectedPhotos.size === photos.length ? "Deselect All" : "Select All"}
-                              </button>
-                              {selectedPhotos.size > 0 && (
-                                <button className="pc-btn pc-btn--sm pc-btn--danger" onClick={removeSelectedPhotos}>
-                                  Remove
-                                </button>
-                              )}
-                            </>
-                          )}
-                        </div>
-                      </div>
-                      {photos.length === 0 ? (
-                        <div className="pc-empty-photos" onClick={() => fileInputRef.current?.click()}>
-                          <span className="pc-empty-photos__icon">🖼️</span>
-                          <p>Click to add photos or load from processed output</p>
                         </div>
                       ) : (
                         <div className="pc-photo-grid">
                           {photos.map((photo) => (
                             <div
                               key={photo.id}
-                              className={`pc-photo-thumb ${selectedPhotos.has(photo.id) ? "pc-photo-thumb--selected" : ""} ${photo.uploading ? "pc-photo-thumb--uploading" : ""}`}
+                              className={`pc-photo-thumb ${selectedPhotos.has(photo.id) ? "pc-photo-thumb--selected" : ""}`}
                               onClick={() => togglePhotoSelection(photo.id)}
                             >
                               <img src={photo.thumb} alt={photo.name} loading="lazy" />
-                              {photo.uploading && (
-                                <div className="pc-photo-thumb__uploading">
-                                  <span className="pc-spinner" />
-                                </div>
-                              )}
                               <div className="pc-photo-thumb__check">
-                                {selectedPhotos.has(photo.id) ? "✓" : photo.path ? "✓" : ""}
+                                {selectedPhotos.has(photo.id) ? "✓" : "✓"}
                               </div>
                               <span className="pc-photo-thumb__name">{photo.name}</span>
                             </div>
                           ))}
+                          <div className="pc-photo-add-more" onClick={() => fileInputRef.current?.click()}>
+                            + Add more
+                          </div>
+                          <input ref={fileInputRef} type="file" multiple accept="image/*" hidden onChange={handleFileSelect} />
                         </div>
                       )}
-                    </section>
+                    </div>
                   )}
 
-                  {/* Post Preview */}
-                  <section className="pc-section">
-                    <h3>👁️ Post Preview</h3>
-                    <div className="pc-preview">
-                      <div className="pc-preview__header">
-                        <div className="pc-preview__avatar">
-                          {selectedPage?.picture_url ? (
-                            <img src={selectedPage.picture_url} alt="" />
-                          ) : (
-                            <Icon name="folder" size={18} />
-                          )}
-                        </div>
-                        <div>
-                          <strong>{selectedPage?.page_name || "Your Page"}</strong>
-                          <span className="pc-preview__meta">
-                            Just now · 🌐 {mediaType === "reel" ? "· 📱 Reel" : mediaType === "video" ? "· 🎥 Video" : ""}
-                          </span>
-                        </div>
+                  {/* Caption Section */}
+                  <div className="pc-card-section">
+                    <div className="pc-card-head">
+                      <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                        <span className="pc-card-title">Caption</span>
+                        <span className="pc-ai-badge">AI</span>
                       </div>
-                      {fullPostText && (
-                        <div className="pc-preview__text">
-                          {fullPostText.split("\n").map((line, i) => (
-                            <React.Fragment key={i}>
-                              {line}
-                              {i < fullPostText.split("\n").length - 1 && <br />}
-                            </React.Fragment>
-                          ))}
-                        </div>
-                      )}
-                      {mediaType !== "photo" && videoItem ? (
-                        <div className="pc-preview__video-wrap" style={{ textAlign: "center", margin: "10px 0" }}>
-                          <video
-                            src={videoItem.streamUrl}
-                            controls
-                            style={{
-                              width: "100%",
-                              maxHeight: mediaType === "reel" ? "320px" : "200px",
-                              borderRadius: "6px",
-                              background: "#000",
-                            }}
-                          />
-                          {mediaType === "video" && videoTitle && (
-                            <h4 style={{ margin: "8px 0 4px", fontSize: "14px", fontWeight: "600" }}>{videoTitle}</h4>
-                          )}
-                        </div>
-                      ) : null}
-                      {photos.length > 0 && (
-                        <div className={`pc-preview__images pc-preview__images--${Math.min(photos.length, 4)}`}>
-                          {photos.slice(0, 4).map((p, i) => (
-                            <div key={p.id} className="pc-preview__img-wrap">
-                              <img src={p.thumb} alt="" />
-                              {i === 3 && photos.length > 4 && (
-                                <div className="pc-preview__more">+{photos.length - 4}</div>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      <div className="pc-preview__actions">
-                        <span>👍 Like</span>
-                        <span>💬 Comment</span>
-                        <span>↗️ Share</span>
-                      </div>
-                    </div>
-                  </section>
-                </div>
-
-                {/* Right column: Caption + Hashtags + Publish */}
-                <div className="pc-compose__right">
-                  {/* Caption */}
-                  <section className="pc-section">
-                    <div className="pc-section__head">
-                      <h3><Icon name="edit" size={16} /> Caption</h3>
-                      <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={() => setShowCaptionSettings((open) => !open)}>
-                        AI settings
-                      </button>
-                      <span className="pc-char-count" data-warn={charCount > 60000}>{charCount.toLocaleString()}</span>
+                      <span className="pc-char-count">{charCount} / 5000</span>
                     </div>
 
-                    {showCaptionSettings && (
-                      <div className="pc-ai-settings">
-                        <div className="pc-ai-settings__row">
-                          <label className="pc-label">Generator</label>
-                          <select className="pc-select" value={captionProvider} onChange={(e) => setCaptionProvider(e.target.value)}>
-                            <option value="rule-based">Local offline</option>
-                            <option value="local-vlm">Local vision model</option>
-                            <option value="online">Online text AI</option>
-                          </select>
-                        </div>
-                        {captionProvider === "online" && (
-                          <>
-                            <div className="pc-ai-settings__row">
-                              <label className="pc-label">Provider</label>
-                              <select className="pc-select" value={captionConfig.provider} onChange={(e) => setCaptionConfig((c) => ({ ...c, provider: e.target.value }))}>
-                                <option value="gemini">Google Gemini</option>
-                                <option value="openai-compatible">OpenAI-compatible</option>
-                              </select>
-                            </div>
-                            <input className="pc-input" placeholder="Model name" value={captionConfig.model} onChange={(e) => setCaptionConfig((c) => ({ ...c, model: e.target.value }))} />
-                            <input className="pc-input" placeholder="API key (stored locally)" type="password" value={captionConfig.api_key} onChange={(e) => setCaptionConfig((c) => ({ ...c, api_key: e.target.value }))} />
-                            <input className="pc-input" placeholder="API base URL" value={captionConfig.base_url} onChange={(e) => setCaptionConfig((c) => ({ ...c, base_url: e.target.value }))} />
-                            <div className="pc-ai-settings__actions">
-                              <button className="pc-btn pc-btn--sm pc-btn--accent" onClick={async () => {
-                                try {
-                                  await api.saveCaptionConfig(captionConfig);
-                                  setCaptionConnection({ ok: true, message: "Saved locally" });
-                                } catch (err) {
-                                  setCaptionConnection({ ok: false, message: err.message });
-                                }
-                              }}>Save locally</button>
-                              <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={async () => {
-                                try {
-                                  const result = await api.testCaptionConnection({
-                                    ...captionConfig,
-                                    provider: captionConfig.provider === "openai-compatible"
-                                      ? "openai-compatible"
-                                      : "gemini",
-                                  });
-                                  setCaptionConnection({ ok: true, message: `Connected: ${result.model_name}` });
-                                } catch (err) {
-                                  setCaptionConnection({ ok: false, message: err.message });
-                                }
-                              }}>Test connection</button>
-                            </div>
-                            {captionConnection && <small className={captionConnection.ok ? "pc-ai-status--ok" : "pc-ai-status--error"}>{captionConnection.message}</small>}
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                    <label className="pc-label" htmlFor="caption-prompt">Caption prompt</label>
                     <textarea
-                      id="caption-prompt"
-                      className="pc-textarea pc-caption-prompt"
-                      placeholder="Tell the AI exactly what caption to write..."
-                      value={captionPrompt}
-                      onChange={(e) => setCaptionPrompt(e.target.value)}
-                      rows={3}
+                      ref={captionRef}
+                      className="pc-textarea pc-textarea--caption"
+                      placeholder="Write your caption here..."
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                      rows={4}
                     />
 
-                    <div className="pc-caption-area">
-                      <textarea
-                        ref={captionRef}
-                        className="pc-textarea"
-                        placeholder="Generated caption will appear here. You can edit it before posting."
-                        value={caption}
-                        onChange={(e) => setCaption(e.target.value)}
-                        rows={5}
-                      />
+                    <div className="pc-caption-toolbar">
+                      <div className="pc-caption-tools">
+                        <button className="pc-tool-btn" title="Emoji">😊</button>
+                        <button className="pc-tool-btn" title="Mention">@</button>
+                        <button className="pc-tool-btn" title="Hashtag">#</button>
+                        <button className="link" onClick={() => setShowCaptionSettings((open) => !open)} style={{ fontSize: "0.75rem" }}>
+                          AI Prompt
+                        </button>
+                      </div>
+
                       <button
-                        className="pc-btn pc-btn--accent pc-btn--generate"
+                        className="btn btn--primary btn--sm pc-generate-btn"
                         onClick={handleGenerateCaption}
                         disabled={isGeneratingCaption}
                       >
                         {isGeneratingCaption ? (
                           <><span className="pc-spinner" /> Generating...</>
                         ) : (
-                          <><Icon name="sparkle" size={14} /> Generate Caption</>
+                          <><Icon name="sparkle" size={14} /> Generate with AI</>
                         )}
                       </button>
                     </div>
-                  </section>
 
-                  {/* Hashtags */}
-                  <section className="pc-section">
-                    <div className="pc-section__head">
-                      <h3># Hashtags ({hashtags.length})</h3>
+                    {showCaptionSettings && (
+                      <div className="pc-ai-settings" style={{ marginTop: "10px" }}>
+                        <textarea
+                          id="caption-prompt"
+                          className="pc-textarea pc-caption-prompt"
+                          placeholder="Tell AI what to write about..."
+                          value={captionPrompt}
+                          onChange={(e) => setCaptionPrompt(e.target.value)}
+                          rows={2}
+                        />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Hashtags Section */}
+                  <div className="pc-card-section">
+                    <div className="pc-card-head">
+                      <span className="pc-card-title"># Hashtags</span>
                       {hashtags.length > 0 && (
-                        <div className="pc-section__actions">
-                          <button
-                            className="pc-btn pc-btn--sm pc-btn--ghost"
-                            onClick={() => {
-                              navigator.clipboard.writeText(hashtags.join(" "));
-                              notify("Hashtags copied!");
-                            }}
-                          >
-                            <><Icon name="layers" size={14} /> Copy</>
-                          </button>
-                          <button
-                            className="pc-btn pc-btn--sm pc-btn--ghost"
-                            onClick={() => setShowHashtagSetSave(true)}
-                          >
-                            💾 Save Set
-                          </button>
-                        </div>
+                        <button
+                          className="link"
+                          onClick={() => {
+                            navigator.clipboard.writeText(hashtags.join(" "));
+                            notify("Hashtags copied!");
+                          }}
+                        >
+                          Copy
+                        </button>
                       )}
                     </div>
 
-                    {/* Category selector */}
-                    <div className="pc-style-pills">
-                      {HASHTAG_CATEGORIES.map((cat) => (
+                    <div className="pc-hashtag-chips">
+                      {["Photography", "Nature", "Travel", "Temple", "Event"].map((tag) => (
                         <button
-                          key={cat}
-                          className={`pc-pill ${hashtagCategory === cat ? "pc-pill--active" : ""}`}
-                          onClick={() => setHashtagCategory(cat)}
+                          key={tag}
+                          className="pc-tag-chip"
+                          onClick={() => {
+                            if (!hashtags.includes(`#${tag}`)) setHashtags([...hashtags, `#${tag}`]);
+                          }}
                         >
-                          {cat}
+                          #{tag}
                         </button>
                       ))}
-                    </div>
-
-                    <div className="pc-hashtag-input-row">
-                      <input
-                        className="pc-input"
-                        placeholder="Add hashtag..."
-                        value={hashtagInput}
-                        onChange={(e) => setHashtagInput(e.target.value)}
-                        onKeyDown={(e) => e.key === "Enter" && addHashtag()}
-                      />
-                      <button className="pc-btn pc-btn--sm" onClick={addHashtag}>Add</button>
-                      <button
-                        className="pc-btn pc-btn--accent pc-btn--sm"
-                        onClick={handleGenerateHashtags}
-                        disabled={isGeneratingHashtags}
-                      >
-                        {isGeneratingHashtags ? "..." : <><Icon name="sparkle" size={14} /> Generate</>}
+                      {hashtags.map((tag) => (
+                        <span key={tag} className="pc-tag-chip pc-tag-chip--active">
+                          {tag}
+                          <button onClick={() => removeHashtag(tag)}>✕</button>
+                        </span>
+                      ))}
+                      <button className="pc-tag-chip pc-tag-chip--add" onClick={() => {
+                        const custom = prompt("Add hashtag:");
+                        if (custom) addHashtag(custom.startsWith("#") ? custom : `#${custom}`);
+                      }}>
+                        + Add
                       </button>
                     </div>
+                  </div>
+                </main>
 
-                    {/* Hashtag tags */}
-                    {hashtags.length > 0 && (
-                      <div className="pc-hashtag-cloud">
-                        {hashtags.map((tag) => (
-                          <span key={tag} className="pc-hashtag-tag">
-                            {tag}
-                            <button onClick={() => removeHashtag(tag)}>✕</button>
-                          </span>
-                        ))}
+                {/* Column 3: Live Preview & Publish */}
+                <aside className="pc-preview-col">
+                  <div className="pc-preview-head">
+                    <div className="pc-preview-title-wrap">
+                      <h3>Preview</h3>
+                      <span className="pc-preview-badge">
+                        {mediaType === "reel" ? "Facebook Reel" : mediaType === "video" ? "Facebook Video" : mediaType === "story" ? "Facebook Story" : "Facebook Photo Post"}
+                      </span>
+                    </div>
+                    <button className="icon-btn" onClick={onClose} title="Close">✕</button>
+                  </div>
+
+                  {/* Dynamic Preview Container */}
+                  <div className="pc-preview-scroll-area">
+                    {/* CASE 1: Photo Post (Authentic Facebook Feed Card) */}
+                    {mediaType === "photo" && (
+                      <div className="pc-fb-card">
+                        <div className="pc-fb-head">
+                          <div className="pc-fb-author">
+                            <div className="pc-fb-avatar">
+                              {selectedPage?.picture_url ? (
+                                <img src={selectedPage.picture_url} alt="" />
+                              ) : (
+                                <Icon name="brand" size={16} />
+                              )}
+                            </div>
+                            <div className="pc-fb-author-info">
+                              <span className="pc-fb-name">{selectedPage?.page_name || "PhotoPilot Creator"}</span>
+                              <span className="pc-fb-meta">Just now · 🌍 Public</span>
+                            </div>
+                          </div>
+                          <div className="pc-fb-more">•••</div>
+                        </div>
+
+                        {/* Post Caption Text */}
+                        <div className="pc-fb-text">
+                          {fullPostText ? (
+                            <span>{fullPostText}</span>
+                          ) : (
+                            <span className="pc-fb-placeholder-text">Write your caption to preview how it looks on Facebook...</span>
+                          )}
+                        </div>
+
+                        {/* Photo Collage Layout */}
+                        <div className="pc-fb-media">
+                          {activePhotos.length === 0 ? (
+                            <div className="pc-fb-empty">
+                              <Icon name="brand" size={32} />
+                              <span>No photos selected yet</span>
+                              <small>Select photos from workspace or upload</small>
+                            </div>
+                          ) : activePhotos.length === 1 ? (
+                            <div className="pc-fb-grid pc-fb-grid--1">
+                              <img src={activePhotos[0].thumb} alt="Preview 1" className="pc-fb-img" />
+                            </div>
+                          ) : activePhotos.length === 2 ? (
+                            <div className="pc-fb-grid pc-fb-grid--2">
+                              <img src={activePhotos[0].thumb} alt="Preview 1" className="pc-fb-img" />
+                              <img src={activePhotos[1].thumb} alt="Preview 2" className="pc-fb-img" />
+                            </div>
+                          ) : activePhotos.length === 3 ? (
+                            <div className="pc-fb-grid pc-fb-grid--3">
+                              <div className="pc-fb-grid__top">
+                                <img src={activePhotos[0].thumb} alt="Preview 1" className="pc-fb-img" />
+                              </div>
+                              <div className="pc-fb-grid__row">
+                                <img src={activePhotos[1].thumb} alt="Preview 2" className="pc-fb-img" />
+                                <img src={activePhotos[2].thumb} alt="Preview 3" className="pc-fb-img" />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="pc-fb-grid pc-fb-grid--4">
+                              <div className="pc-fb-grid__item"><img src={activePhotos[0].thumb} alt="1" className="pc-fb-img" /></div>
+                              <div className="pc-fb-grid__item"><img src={activePhotos[1].thumb} alt="2" className="pc-fb-img" /></div>
+                              <div className="pc-fb-grid__item"><img src={activePhotos[2].thumb} alt="3" className="pc-fb-img" /></div>
+                              <div className="pc-fb-grid__item pc-fb-grid__item--more">
+                                <img src={activePhotos[3].thumb} alt="4" className="pc-fb-img" />
+                                {activePhotos.length > 4 && (
+                                  <div className="pc-fb-more-overlay">
+                                    +{activePhotos.length - 3}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Engagement Stats Bar */}
+                        <div className="pc-fb-stats">
+                          <div className="pc-fb-reactions">
+                            <span className="pc-fb-reaction-bubble pc-fb-reaction-bubble--like">👍</span>
+                            <span className="pc-fb-reaction-bubble pc-fb-reaction-bubble--love">❤️</span>
+                            <span className="pc-fb-reaction-count">{Math.max(12, activePhotos.length * 8)}</span>
+                          </div>
+                          <div className="pc-fb-counts">
+                            <span>{Math.max(2, activePhotos.length)} comments</span> · <span>1 share</span>
+                          </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="pc-fb-actions">
+                          <button className="pc-fb-action-btn"><span>👍</span> Like</button>
+                          <button className="pc-fb-action-btn"><span>💬</span> Comment</button>
+                          <button className="pc-fb-action-btn"><span>↗</span> Share</button>
+                        </div>
                       </div>
                     )}
 
-                    {/* Saved sets */}
-                    {hashtagSets.length > 0 && (
-                      <div className="pc-hashtag-sets">
-                        <small className="pc-label">Saved Sets:</small>
-                        <div className="pc-hashtag-sets__list">
-                          {hashtagSets.map((set) => (
-                            <div key={set.id} className="pc-hashtag-set-item">
-                              <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={() => loadHashtagSet(set)}>
-                                {set.name} ({set.hashtags.length})
-                              </button>
-                              <button className="pc-btn pc-btn--sm pc-btn--icon" onClick={() => handleDeleteHashtagSet(set.id)}>
-                                🗑️
-                              </button>
+                    {/* CASE 2: Video Post (Facebook Feed Video Card) */}
+                    {mediaType === "video" && (
+                      <div className="pc-fb-card">
+                        <div className="pc-fb-head">
+                          <div className="pc-fb-author">
+                            <div className="pc-fb-avatar">
+                              {selectedPage?.picture_url ? (
+                                <img src={selectedPage.picture_url} alt="" />
+                              ) : (
+                                <Icon name="brand" size={16} />
+                              )}
+                            </div>
+                            <div className="pc-fb-author-info">
+                              <span className="pc-fb-name">{selectedPage?.page_name || "PhotoPilot Creator"}</span>
+                              <span className="pc-fb-meta">Just now · 🌍 Public</span>
+                            </div>
+                          </div>
+                          <div className="pc-fb-more">•••</div>
+                        </div>
+
+                        <div className="pc-fb-text">
+                          {fullPostText ? (
+                            <span>{fullPostText}</span>
+                          ) : (
+                            <span className="pc-fb-placeholder-text">Write your caption to preview how it looks on Facebook...</span>
+                          )}
+                        </div>
+
+                        <div className="pc-fb-video-wrap">
+                          {videoItem ? (
+                            <video
+                              src={videoItem.streamUrl}
+                              controls
+                              className="pc-fb-video-player"
+                            />
+                          ) : (
+                            <div className="pc-fb-empty pc-fb-empty--video">
+                              <Icon name="film" size={40} />
+                              <span>No video selected</span>
+                              <small>Select or upload an MP4/MOV video</small>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pc-fb-stats">
+                          <div className="pc-fb-reactions">
+                            <span className="pc-fb-reaction-bubble pc-fb-reaction-bubble--like">👍</span>
+                            <span className="pc-fb-reaction-bubble pc-fb-reaction-bubble--love">❤️</span>
+                            <span className="pc-fb-reaction-count">86</span>
+                          </div>
+                          <div className="pc-fb-counts">
+                            <span>14 comments</span> · <span>8 shares</span>
+                          </div>
+                        </div>
+
+                        <div className="pc-fb-actions">
+                          <button className="pc-fb-action-btn"><span>👍</span> Like</button>
+                          <button className="pc-fb-action-btn"><span>💬</span> Comment</button>
+                          <button className="pc-fb-action-btn"><span>↗</span> Share</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* CASE 3: Reel & Story (Vertical 9:16 Phone Mockup) */}
+                    {(mediaType === "reel" || mediaType === "story") && (
+                      <div className="pc-phone">
+                        <div className="pc-phone__speaker" />
+                        <div className="pc-phone__screen">
+                          {/* Story Progress Indicators */}
+                          {mediaType === "story" && (
+                            <div className="pc-story-bars">
+                              <div className="pc-story-bar pc-story-bar--filled" />
+                              <div className="pc-story-bar pc-story-bar--active" />
+                              <div className="pc-story-bar" />
+                            </div>
+                          )}
+
+                          {/* Media view inside phone */}
+                          {videoItem ? (
+                            <video
+                              src={videoItem.streamUrl}
+                              controls
+                              className="pc-phone__video"
+                              autoPlay
+                              muted
+                              loop
+                            />
+                          ) : activePhotos.length > 0 ? (
+                            <img src={activePhotos[0].thumb} alt="Preview" className="pc-phone__img" />
+                          ) : (
+                            <div className="pc-phone__placeholder">
+                              <Icon name="film" size={40} />
+                              <span>{mediaType === "reel" ? "No reel video selected" : "No story image selected"}</span>
+                            </div>
+                          )}
+
+                          {/* Overlays */}
+                          {mediaType === "reel" ? (
+                            <div className="pc-phone__overlay">
+                              <div className="pc-phone__side-actions">
+                                <div className="pc-phone__action"><span className="pc-phone__emoji">❤️</span><small>Like</small></div>
+                                <div className="pc-phone__action"><span className="pc-phone__emoji">💬</span><small>Comment</small></div>
+                                <div className="pc-phone__action"><span className="pc-phone__emoji">↗</span><small>Share</small></div>
+                              </div>
+
+                              <div className="pc-phone__bottom">
+                                <div className="pc-phone__author">
+                                  <div className="pc-phone__avatar">
+                                    {selectedPage?.picture_url ? (
+                                      <img src={selectedPage.picture_url} alt="" />
+                                    ) : (
+                                      <Icon name="brand" size={14} />
+                                    )}
+                                  </div>
+                                  <span className="pc-phone__author-name">{selectedPage?.page_name || "PhotoPilot Creator"}</span>
+                                </div>
+                                <p className="pc-phone__caption">
+                                  {fullPostText ? fullPostText.slice(0, 110) + (fullPostText.length > 110 ? "..." : "") : "Write a caption to see it here..."}
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            /* Story Overlay */
+                            <div className="pc-phone__story-overlay">
+                              <div className="pc-phone__story-head">
+                                <div className="pc-phone__avatar">
+                                  {selectedPage?.picture_url ? (
+                                    <img src={selectedPage.picture_url} alt="" />
+                                  ) : (
+                                    <Icon name="brand" size={14} />
+                                  )}
+                                </div>
+                                <span className="pc-phone__author-name">{selectedPage?.page_name || "PhotoPilot"}</span>
+                                <span className="pc-story-time">Just now</span>
+                              </div>
+                              <div className="pc-story-foot">
+                                <div className="pc-story-reply">Reply to {selectedPage?.page_name || "creator"}...</div>
+                                <span className="pc-story-react">❤️</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Publishing Progress Card - Dedicated Full-Width */}
+                  {isPublishing && publishProgress && (
+                    <div className="pc-publish-card" aria-live="polite">
+                      <div className="pc-publish-card__header">
+                        <div className="pc-publish-card__title">
+                          <span className="pc-pulse-dot" />
+                          <span>
+                            {publishProgress.status === "complete"
+                              ? "Upload finished! Finalizing..."
+                              : "Publishing to Facebook..."}
+                          </span>
+                        </div>
+                        <div className="pc-publish-card__actions">
+                          <span className="pc-publish-card__percent">{publishProgress.percent}%</span>
+                          <button
+                            type="button"
+                            className="pc-publish-card__cancel-btn"
+                            onClick={handleCancelPublish}
+                            title="Cancel uploading to Facebook"
+                          >
+                            ✕ Cancel
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="pc-publish-card__bar-wrap">
+                        <div
+                          className="pc-publish-card__bar-fill"
+                          style={{ width: `${Math.min(100, Math.max(0, publishProgress.percent))}%` }}
+                        />
+                      </div>
+
+                      <div className="pc-publish-card__meta">
+                        <span className="pc-publish-card__count">
+                          📸 <strong>{publishProgress.completed}</strong> of <strong>{publishProgress.total}</strong> uploaded
+                        </span>
+                        {publishProgress.eta_seconds != null && publishProgress.eta_seconds > 0 && (
+                          <span className="pc-publish-card__eta">
+                            ⏱ ~{formatEta(publishProgress.eta_seconds)}
+                          </span>
+                        )}
+                      </div>
+
+                      {publishProgress.pages && Object.keys(publishProgress.pages).length > 1 && (
+                        <div className="pc-publish-card__pages">
+                          {Object.entries(publishProgress.pages).map(([pid, pinfo]) => (
+                            <div key={pid} className="pc-publish-card__page-row">
+                              <span className="pc-publish-card__page-name">📄 {pinfo.page_name}</span>
+                              <span className="pc-publish-card__page-stat">
+                                {pinfo.completed}/{pinfo.total} ({pinfo.percent}%)
+                              </span>
                             </div>
                           ))}
                         </div>
-                      </div>
-                    )}
-
-                    {/* Save set modal */}
-                    {showHashtagSetSave && (
-                      <div className="pc-inline-form">
-                        <input
-                          className="pc-input"
-                          placeholder="Set name..."
-                          value={hashtagSetName}
-                          onChange={(e) => setHashtagSetName(e.target.value)}
-                          onKeyDown={(e) => e.key === "Enter" && handleSaveHashtagSet()}
-                          autoFocus
-                        />
-                        <button className="pc-btn pc-btn--sm pc-btn--accent" onClick={handleSaveHashtagSet}>Save</button>
-                        <button className="pc-btn pc-btn--sm pc-btn--ghost" onClick={() => setShowHashtagSetSave(false)}>Cancel</button>
-                      </div>
-                    )}
-                  </section>
-
-                  {/* Publish Controls */}
-                  <section className="pc-section pc-publish-section">
-                    <h3><Icon name="upload" size={16} /> Publish</h3>
-
-                    {/* Page selector */}
-                    <div className="pc-page-selector">
-                      <label className="pc-label">Publish to:</label>
-                      {pages.length > 0 ? (
-                        <details className="pc-page-dropdown">
-                          <summary>
-                            <span>
-                              {selectedPages.length
-                                ? `${selectedPages.length} Page${selectedPages.length > 1 ? "s" : ""} selected`
-                                : "Select Pages..."}
-                            </span>
-                            <span className="pc-page-dropdown__chevron">⌄</span>
-                          </summary>
-                          <div className="pc-page-dropdown__menu">
-                            {pages.map((pg) => {
-                              const checked = selectedPages.some((selected) => selected.page_id === pg.page_id);
-                              return (
-                                <label key={pg.page_id} className="pc-page-checkbox">
-                                  <input
-                                    type="checkbox"
-                                    checked={checked}
-                                    onChange={() => setSelectedPages((prev) =>
-                                      checked
-                                        ? prev.filter((selected) => selected.page_id !== pg.page_id)
-                                        : [...prev, pg]
-                                    )}
-                                  />
-                                  <span>{pg.page_name} ({pg.category || "Page"})</span>
-                                </label>
-                              );
-                            })}
-                          </div>
-                        </details>
-                      ) : (
-                        <button
-                          className="pc-btn pc-btn--accent pc-btn--sm"
-                          onClick={() => setShowConnectModal(true)}
-                        >
-                          <><Icon name="folder" size={14} /> Connect Facebook Page</>
-                        </button>
                       )}
                     </div>
+                  )}
 
-                    {/* Publish mode */}
-                    <div className="pc-publish-modes">
-                      {[
-                        { id: "now", label: "Publish Now", icon: "upload" },
-                        { id: "schedule", label: "Schedule", icon: "clock" },
-                        { id: "draft", label: "Save Draft", icon: "layers" },
-                      ].map((m) => (
-                        <button
-                          key={m.id}
-                          className={`pc-mode-btn ${publishMode === m.id ? "pc-mode-btn--active" : ""}`}
-                          onClick={() => setPublishMode(m.id)}
-                        >
-                          <Icon name={m.icon} size={14} /> {m.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {/* Schedule inputs */}
-                    {publishMode === "schedule" && (
-                      <div className="pc-schedule-row">
-                        <input
-                          type="date"
-                          className="pc-input pc-input--date"
-                          value={scheduleDate}
-                          onChange={(e) => setScheduleDate(e.target.value)}
-                        />
-                        <input
-                          type="time"
-                          className="pc-input pc-input--time"
-                          value={scheduleTime}
-                          onChange={(e) => setScheduleTime(e.target.value)}
-                        />
-                      </div>
-                    )}
-
-                    {/* Publish button */}
+                  {/* Bottom Action Buttons */}
+                  <div className="pc-preview-foot">
                     <button
-                      className={`pc-btn pc-btn--publish ${publishMode === "draft" ? "pc-btn--secondary" : "pc-btn--accent"}`}
-                      onClick={handlePublish}
-                      disabled={
-                        isPublishing ||
-                        (publishMode !== "draft" && (
-                          mediaType === "photo"
-                            ? !photos.length
-                            : !videoItem?.videoPath
-                        )) ||
-                        (publishMode !== "draft" && !selectedPages.length)
-                      }
+                      className="btn btn--secondary pc-btn-draft"
+                      onClick={() => {
+                        setPublishMode("draft");
+                        handlePublish();
+                      }}
+                      disabled={isPublishing}
                     >
-                      {isPublishing ? (
-                        <><span className="pc-spinner" /> {publishProgress ? `Uploading ${publishProgress.completed}/${publishProgress.total} (${publishProgress.percent}%)` : "Starting publish..."}</>
-                      ) : publishMode === "now" ? (
-                        <><Icon name="upload" size={15} /> Publish Now</>
-                      ) : publishMode === "schedule" ? (
-                        <><Icon name="clock" size={15} /> Schedule Post</>
-                      ) : (
-                        "Save as Draft"
-                      )}
+                      Save Draft
                     </button>
-                    {isPublishing && publishProgress && (
-                      <div className="pc-publish-progress" aria-live="polite">
-                        <div className="pc-publish-progress__bar">
-                          <div style={{ width: `${publishProgress.percent}%` }} />
-                        </div>
-                        <div className="pc-publish-progress__summary">
-                          <span>{publishProgress.percent}% uploaded · {formatEta(publishProgress.eta_seconds)}</span>
-                          <span>{publishProgress.completed}/{publishProgress.total} photo uploads</span>
-                        </div>
-                        {publishProgress.pages && (
-                          <div className="pc-page-progress-list">
-                            {Object.values(publishProgress.pages).map((page) => (
-                              <div className="pc-page-progress" key={page.page_id}>
-                                <div className="pc-page-progress__head">
-                                  <span>{page.page_name}</span>
-                                  <span className={`pc-page-progress__status pc-page-progress__status--${page.status}`}>
-                                    {page.status === "failed" ? "Failed" : page.status === "complete" || page.status === "published" || page.status === "scheduled" ? "Complete" : `${page.percent}%`}
-                                  </span>
-                                </div>
-                                <div className="pc-page-progress__bar">
-                                  <div className={`pc-page-progress__fill pc-page-progress__fill--${page.status}`} style={{ width: `${page.percent}%` }} />
-                                </div>
-                                <small>
-                                  {page.status === "failed" ? page.error : `${page.completed}/${page.total} photos`}
-                                </small>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </section>
-                </div>
+                    <button
+                      className="btn btn--primary pc-publish-now-btn"
+                      onClick={handlePublish}
+                      disabled={isPublishing || (publishMode !== "draft" && !selectedPages.length && pages.length > 0)}
+                    >
+                      <span>
+                        {isPublishing
+                          ? `Publishing (${publishProgress?.percent || 0}%)...`
+                          : "Publish Now"}
+                      </span>
+                      {!isPublishing && <span className="pc-publish-split">▾</span>}
+                    </button>
+                  </div>
+                </aside>
               </div>
             </div>
           )}

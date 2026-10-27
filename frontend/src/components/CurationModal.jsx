@@ -14,6 +14,7 @@ export function CurationModal({ isOpen, onClose, onApplySelected, currentFiles =
   const [bestNCount, setBestNCount] = useState(30);
   const [showConfig, setShowConfig] = useState(false);
   const [config, setConfig] = useState(null);
+  const [sourceMode, setSourceMode] = useState("folder"); // "folder" or "files"
   const [hardwareInfo, setHardwareInfo] = useState("Checking...");
   const pollTimerRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -200,15 +201,25 @@ export function CurationModal({ isOpen, onClose, onApplySelected, currentFiles =
 
   return (
     <div className="curation-modal-overlay">
-      <div className="curation-modal">
+      <div className="curation-modal curation-modal--v2">
         {/* Header */}
         <div className="curation-modal__head">
           <div className="curation-modal__title-area">
-            <span className="curation-modal__icon">✨</span>
+            <div className="curation-modal__logo-badge">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                <path d="M12 2L15 9L22 12L15 15L12 22L9 15L2 12L9 9L12 2Z" fill="url(#sparkle-grad)" />
+                <defs>
+                  <linearGradient id="sparkle-grad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+                    <stop stopColor="#7b93ff" />
+                    <stop offset="1" stopColor="#a87bff" />
+                  </linearGradient>
+                </defs>
+              </svg>
+            </div>
             <div>
               <h2 className="curation-modal__title">AI Photo Curation & Duplicate Detector</h2>
               <p className="curation-modal__subtitle">
-                Exact duplicates · Similar bursts · Smart quality analysis · Diversity selection
+                Find best photos, remove duplicates, analyze quality with AI
               </p>
             </div>
           </div>
@@ -221,181 +232,281 @@ export function CurationModal({ isOpen, onClose, onApplySelected, currentFiles =
           </div>
         </div>
 
-        {/* BODY */}
-        <div className="curation-modal__body">
-          {stage === "idle" && (
-            <div className="curation-setup">
-              <div className="curation-setup__grid">
-                {/* Method 1: Local Folder Scanner */}
-                <div className="curation-card">
-                  <div className="curation-card__head">
-                    <span className="curation-card__icon">📁</span>
-                    <h3>Scan Local PC Folder</h3>
-                  </div>
-                  <p className="curation-card__desc">
-                    Select a folder on your computer with hundreds of photos (RAW, JPG, PNG).
-                  </p>
-                  <div className="input-group" style={{ marginTop: "12px", alignItems: "center" }}>
-                    <input
-                      ref={folderInputRef}
-                      type="file"
-                      webkitdirectory=""
-                      directory=""
-                      multiple
-                      hidden
-                      onChange={(e) => {
-                        const selectedFiles = Array.from(e.target.files || []);
-                        e.target.value = "";
-                        const supported = selectedFiles.filter((file) =>
-                          /\.(jpe?g|png|webp|bmp|tiff?|dng|cr2|cr3|nef|arw|heic|heif)$/i.test(file.name)
-                        );
-                        if (supported.length) {
-                          setUploadFiles(supported);
-                          setFolderPath(selectedFiles[0].webkitRelativePath?.split("/")[0] || "Selected folder");
-                          launchCuration(supported, "");
-                        } else if (selectedFiles.length) {
-                          alert("No supported image files found in the selected folder.");
-                        }
-                      }}
-                    />
-                    <input
-                      type="text"
-                      className="input"
-                      placeholder="Selected folder name"
-                      value={folderPath}
-                      readOnly
-                    />
-                    <button
-                      className="btn btn--primary"
-                      onClick={() => folderInputRef.current?.click()}
-                    >
-                      Browse Folder
-                    </button>
-                  </div>
-                  <p className="curation-card__desc" style={{ marginTop: "8px", fontSize: "0.72rem" }}>
-                    The selected folder is uploaded securely for local analysis; your original files are not changed.
-                  </p>
-                </div>
+        {/* Modal Layout: Stepper Sidebar + Main Content */}
+        <div className="curation-modal__layout">
+          {/* Stepper Sidebar */}
+          <aside className="curation-stepper">
+            {[
+              { num: 1, label: "Import Photos", stageKey: "idle" },
+              { num: 2, label: "AI Analysis", stageKey: "analyzing" },
+              { num: 3, label: "Review & Select", stageKey: "review" },
+              { num: 4, label: "Export Results", stageKey: "export" },
+            ].map((step) => {
+              const isActive =
+                (step.num === 1 && stage === "idle") ||
+                (step.num === 2 && stage === "analyzing") ||
+                (step.num === 3 && stage === "review") ||
+                (step.num === 4 && stage === "export");
+              const isDone =
+                (step.num === 1 && (stage === "analyzing" || stage === "review" || stage === "export")) ||
+                (step.num === 2 && (stage === "review" || stage === "export")) ||
+                (step.num === 3 && stage === "export");
 
-                {/* Method 2: Batch Upload / Current Workspace */}
-                <div className="curation-card">
-                  <div className="curation-card__head">
-                    <span className="curation-card__icon">📥</span>
-                    <h3>Curate Uploaded Photos</h3>
-                  </div>
-                  <p className="curation-card__desc">
-                    Analyze the photos currently in PhotoPilot, or select a new batch from your browser.
-                  </p>
-                  <div style={{ display: "flex", gap: "8px", marginTop: "12px" }}>
-                    <input
-                      type="file"
-                      multiple
-                      accept="image/*,.dng,.cr2,.cr3,.nef,.arw,.heic"
-                      ref={fileInputRef}
-                      hidden
-                      onChange={(e) => {
-                        const sel = Array.from(e.target.files || []);
-                        if (sel.length) {
-                          setUploadFiles(sel);
-                          launchCuration(sel, "");
-                        }
-                      }}
-                    />
-                    <button
-                      className="btn btn--secondary"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
-                      Upload Files
-                    </button>
-                    {currentFiles.length > 0 && (
-                      <button
-                        className="btn btn--primary"
-                        onClick={handleStartWithExisting}
-                      >
-                        Curate {currentFiles.length} Current Photos
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Threshold Settings Accordion */}
-              <div style={{ marginTop: "16px" }}>
-                <button
-                  className="link"
-                  onClick={() => setShowConfig((c) => !c)}
-                  style={{ fontSize: "0.8rem" }}
+              return (
+                <div
+                  key={step.num}
+                  className={`curation-stepper__step ${isActive ? "curation-stepper__step--active" : ""} ${isDone ? "curation-stepper__step--done" : ""}`}
                 >
-                  {showConfig ? "▾ Hide Curation Settings" : "▸ Advanced Threshold & Weight Settings"}
-                </button>
-                {showConfig && config && (
-                  <div className="curation-config-panel">
-                    <div className="curation-config-grid">
-                      <div>
-                        <label className="field-label">pHash Threshold (Hamming dist)</label>
-                        <input
-                          type="number"
-                          className="input"
-                          min="1"
-                          max="20"
-                          value={config.phash_threshold}
-                          onChange={(e) => setConfig({ ...config, phash_threshold: parseInt(e.target.value, 10) })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">AI Embedding Similarity (0.50 - 0.99)</label>
-                        <input
-                          type="number"
-                          step="0.02"
-                          className="input"
-                          min="0.5"
-                          max="0.99"
-                          value={config.embedding_similarity_threshold}
-                          onChange={(e) => setConfig({ ...config, embedding_similarity_threshold: parseFloat(e.target.value) })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Sharpness Weight</label>
-                        <input
-                          type="number"
-                          step="0.05"
-                          className="input"
-                          value={config.weights?.sharpness ?? 0.35}
-                          onChange={(e) => setConfig({
-                            ...config,
-                            weights: { ...config.weights, sharpness: parseFloat(e.target.value) },
-                          })}
-                        />
-                      </div>
-                      <div>
-                        <label className="field-label">Face Quality Weight</label>
-                        <input
-                          type="number"
-                          step="0.05"
-                          className="input"
-                          value={config.weights?.face_quality ?? 0.25}
-                          onChange={(e) => setConfig({
-                            ...config,
-                            weights: { ...config.weights, face_quality: parseFloat(e.target.value) },
-                          })}
-                        />
-                      </div>
-                    </div>
-                    <button
-                      className="btn btn--ghost btn--sm"
-                      style={{ marginTop: "10px" }}
-                      onClick={() => {
-                        api.saveCurationConfig(config);
-                        alert("Settings saved!");
-                      }}
-                    >
-                      Save Settings
-                    </button>
+                  <div className="curation-stepper__num">
+                    {isDone ? "✓" : step.num}
                   </div>
-                )}
+                  <span className="curation-stepper__label">{step.label}</span>
+                </div>
+              );
+            })}
+          </aside>
+
+          {/* Main Body */}
+          <div className="curation-modal__body">
+            {stage === "idle" && (
+              <div className="curation-setup">
+                {/* Source Mode Tabs */}
+                <div className="curation-source-tabs">
+                  <button
+                    className={`curation-source-tab ${sourceMode === "folder" ? "curation-source-tab--active" : ""}`}
+                    onClick={() => setSourceMode("folder")}
+                  >
+                    From Folder
+                  </button>
+                  <button
+                    className={`curation-source-tab ${sourceMode === "files" ? "curation-source-tab--active" : ""}`}
+                    onClick={() => setSourceMode("files")}
+                  >
+                    Upload Files
+                  </button>
+                </div>
+
+                {/* Centered Selection Card */}
+                <div className="curation-dropcard">
+                  <div className="curation-dropcard__icon-wrap">
+                    <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+
+                  <h3 className="curation-dropcard__title">
+                    {sourceMode === "folder" ? "Select a folder with your photos" : "Select photo files to analyze"}
+                  </h3>
+                  <p className="curation-dropcard__hint">
+                    Supports RAW, JPG, PNG and more
+                  </p>
+
+                  {sourceMode === "folder" ? (
+                    <>
+                      <input
+                        ref={folderInputRef}
+                        type="file"
+                        webkitdirectory=""
+                        directory=""
+                        multiple
+                        hidden
+                        onChange={(e) => {
+                          const selectedFiles = Array.from(e.target.files || []);
+                          e.target.value = "";
+                          const supported = selectedFiles.filter((file) =>
+                            /\.(jpe?g|png|webp|bmp|tiff?|dng|cr2|cr3|nef|arw|heic|heif)$/i.test(file.name)
+                          );
+                          if (supported.length) {
+                            setUploadFiles(supported);
+                            setFolderPath(selectedFiles[0].webkitRelativePath?.split("/")[0] || "Selected Folder");
+                          } else if (selectedFiles.length) {
+                            alert("No supported image files found in the selected folder.");
+                          }
+                        }}
+                      />
+                      <button
+                        className="btn btn--primary curation-dropcard__browse-btn"
+                        onClick={() => folderInputRef.current?.click()}
+                      >
+                        Browse Folder
+                      </button>
+
+                      <div className="curation-path-box">
+                        <input
+                          type="text"
+                          className="curation-path-box__input"
+                          placeholder="No folder chosen yet"
+                          value={folderPath}
+                          readOnly
+                        />
+                        {folderPath && (
+                          <button
+                            className="curation-path-box__clear"
+                            title="Clear selection"
+                            onClick={() => {
+                              setFolderPath("");
+                              setUploadFiles([]);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <input
+                        type="file"
+                        multiple
+                        accept="image/*,.dng,.cr2,.cr3,.nef,.arw,.heic"
+                        ref={fileInputRef}
+                        hidden
+                        onChange={(e) => {
+                          const sel = Array.from(e.target.files || []);
+                          if (sel.length) {
+                            setUploadFiles(sel);
+                            setFolderPath(`${sel.length} photo(s) selected`);
+                          }
+                        }}
+                      />
+                      <div style={{ display: "flex", gap: "10px", justifyContent: "center", flexWrap: "wrap" }}>
+                        <button
+                          className="btn btn--primary curation-dropcard__browse-btn"
+                          onClick={() => fileInputRef.current?.click()}
+                        >
+                          Upload Files
+                        </button>
+                        {currentFiles.length > 0 && (
+                          <button
+                            className="btn btn--secondary"
+                            onClick={handleStartWithExisting}
+                          >
+                            Curate Workspace ({currentFiles.length})
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="curation-path-box">
+                        <input
+                          type="text"
+                          className="curation-path-box__input"
+                          placeholder="No files selected yet"
+                          value={uploadFiles.length ? `${uploadFiles.length} file(s) selected` : ""}
+                          readOnly
+                        />
+                        {uploadFiles.length > 0 && (
+                          <button
+                            className="curation-path-box__clear"
+                            title="Clear selection"
+                            onClick={() => {
+                              setFolderPath("");
+                              setUploadFiles([]);
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                {/* Advanced Threshold Settings Accordion */}
+                <div className="curation-accordion">
+                  <button
+                    className="curation-accordion__btn"
+                    onClick={() => setShowConfig((c) => !c)}
+                  >
+                    <span>⚙ Advanced Threshold & Weight Settings</span>
+                    <span>{showConfig ? "▲" : "▼"}</span>
+                  </button>
+
+                  {showConfig && config && (
+                    <div className="curation-config-panel">
+                      <div className="curation-config-grid">
+                        <div>
+                          <label className="field-label">pHash Threshold (Hamming dist)</label>
+                          <input
+                            type="number"
+                            className="input"
+                            min="1"
+                            max="20"
+                            value={config.phash_threshold}
+                            onChange={(e) => setConfig({ ...config, phash_threshold: parseInt(e.target.value, 10) })}
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">AI Embedding Similarity (0.50 - 0.99)</label>
+                          <input
+                            type="number"
+                            step="0.02"
+                            className="input"
+                            min="0.5"
+                            max="0.99"
+                            value={config.embedding_similarity_threshold}
+                            onChange={(e) => setConfig({ ...config, embedding_similarity_threshold: parseFloat(e.target.value) })}
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">Sharpness Weight</label>
+                          <input
+                            type="number"
+                            step="0.05"
+                            className="input"
+                            value={config.weights?.sharpness ?? 0.35}
+                            onChange={(e) => setConfig({
+                              ...config,
+                              weights: { ...config.weights, sharpness: parseFloat(e.target.value) },
+                            })}
+                          />
+                        </div>
+                        <div>
+                          <label className="field-label">Face Quality Weight</label>
+                          <input
+                            type="number"
+                            step="0.05"
+                            className="input"
+                            value={config.weights?.face_quality ?? 0.25}
+                            onChange={(e) => setConfig({
+                              ...config,
+                              weights: { ...config.weights, face_quality: parseFloat(e.target.value) },
+                            })}
+                          />
+                        </div>
+                      </div>
+                      <button
+                        className="btn btn--ghost btn--sm"
+                        style={{ marginTop: "10px" }}
+                        onClick={() => {
+                          api.saveCurationConfig(config);
+                          alert("Settings saved!");
+                        }}
+                      >
+                        Save Settings
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bottom Bar: Action Button */}
+                <div className="curation-setup__bottom">
+                  <div />
+                  <button
+                    className="btn btn--primary curation-start-btn"
+                    disabled={uploadFiles.length === 0}
+                    onClick={() => {
+                      if (uploadFiles.length > 0) {
+                        launchCuration(uploadFiles, "");
+                      } else {
+                        alert("Please select a folder or upload photos first.");
+                      }
+                    }}
+                  >
+                    Start AI Analysis →
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
+            )}
 
           {stage === "analyzing" && (
             <div className="curation-analyzing">
@@ -672,6 +783,7 @@ export function CurationModal({ isOpen, onClose, onApplySelected, currentFiles =
               </div>
             </div>
           )}
+        </div>
         </div>
 
         {/* Footer */}

@@ -288,6 +288,10 @@ export function getPublishProgress(jobId) {
   return fetch(`/api/social/publish/progress/${jobId}`).then(asJson);
 }
 
+export function cancelPublish(jobId) {
+  return fetch(`/api/social/publish/cancel/${jobId}`, { method: "POST" }).then(asJson);
+}
+
 export function getPublishHistory(limit = 50) {
   return fetch(`/api/social/history?limit=${limit}`).then(asJson);
 }

@@ -212,7 +212,10 @@ export function CanvasStage({ file, logo, preset, onUpdate }) {
       h,
       adj,
       preset.auto_enhance,
-      preset.enhance_strength
+      preset.enhance_strength,
+      preset.remove_noise,
+      preset.denoise_strength,
+      preset.auto_color_fix
     );
     ctx.drawImage(adjustedCanvas, 0, 0, w, h);
 

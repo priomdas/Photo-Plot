@@ -384,6 +384,8 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
 
         def publish_for_page(page_id: str, page_data: dict[str, Any]) -> tuple[str, dict[str, Any] | None, str, str]:
             def page_progress(completed: int, total: int) -> None:
+                if job.get("status") == "cancelled" or job.get("cancelled"):
+                    raise FacebookPublishError("Publishing was cancelled by user")
                 page_job = job["pages"][page_id]
                 page_job["completed"] = completed
                 page_job["percent"] = round(completed / total * 100) if total else 100
@@ -398,6 +400,8 @@ def _run_publish_job(job_id: str, req: PublishRequest) -> None:
                 ) if completed_total else None
 
             try:
+                if job.get("status") == "cancelled" or job.get("cancelled"):
+                    raise FacebookPublishError("Publishing was cancelled by user")
                 if is_video:
                     # Video or Reel publish
                     if req.media_type == "video":
@@ -551,6 +555,17 @@ def publish_progress(job_id: str) -> dict[str, Any]:
     if not job:
         raise HTTPException(status_code=404, detail="Publish job not found")
     return job
+
+
+@router.post("/publish/cancel/{job_id}")
+def cancel_publish(job_id: str) -> dict[str, Any]:
+    job = publish_jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Publish job not found")
+    job["status"] = "cancelled"
+    job["cancelled"] = True
+    job["error"] = "Publishing was cancelled by user"
+    return {"status": "cancelled", "job_id": job_id}
 
 
 @router.get("/history")

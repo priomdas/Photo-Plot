@@ -1,40 +1,13 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Icon } from "./Icon";
 
 const ACCEPT =
   ".jpg,.jpeg,.png,.webp,.heic,.heif,.dng,image/jpeg,image/png,image/webp,image/heic,image/heif,image/x-adobe-dng";
 
-// Renders a small live thumbnail for a File, cleaning up its object URL.
-function Thumb({ file, active, index, onSelect, onRemove }) {
-  const [url, setUrl] = useState("");
-  useEffect(() => {
-    const objectUrl = URL.createObjectURL(file);
-    setUrl(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
-  }, [file]);
-  const isImage = /\.(jpe?g|png|webp)$/i.test(file.name);
-  return (
-    <div className={`thumb ${active ? "thumb--active" : ""}`} onClick={() => onSelect(index)} title={file.name}>
-      {isImage ? <img src={url} alt={file.name} loading="lazy" /> : <div className="thumb__raw">RAW</div>}
-      <button
-        className="thumb__remove"
-        onClick={(e) => {
-          e.stopPropagation();
-          onRemove(index);
-        }}
-        aria-label={`Remove ${file.name}`}
-      >
-        ×
-      </button>
-      <span className="thumb__name">{file.name}</span>
-    </div>
-  );
-}
-
 export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
   const [dragOver, setDragOver] = useState(false);
-  const [expanded, setExpanded] = useState(true);
   const inputRef = useRef(null);
+  const folderInputRef = useRef(null);
 
   const addFiles = (list) => {
     const incoming = [...list].filter((f) => f && f.name);
@@ -42,24 +15,9 @@ export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
   };
 
   return (
-    <div className="tray">
-      <div className="tray__head">
-        <div>
-          <span className="tray__eyebrow">Workspace</span>
-          <strong>Photo tray</strong>
-        </div>
-        <button
-          className="icon-btn icon-btn--sm"
-          onClick={() => setExpanded((value) => !value)}
-          title={expanded ? "Collapse photo tray" : "Expand photo tray"}
-          aria-label={expanded ? "Collapse photo tray" : "Expand photo tray"}
-        >
-          <Icon name="chevron" size={16} className={expanded ? "icon--rotate-90" : ""} />
-        </button>
-      </div>
-      {expanded && <div
-        className={`dropzone ${dragOver ? "dropzone--over" : ""}`}
-        onClick={() => inputRef.current?.click()}
+    <div className="drop-hero">
+      <div
+        className={`drop-hero__zone ${dragOver ? "drop-hero__zone--over" : ""}`}
         onDragOver={(e) => {
           e.preventDefault();
           setDragOver(true);
@@ -71,9 +29,34 @@ export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
           addFiles(e.dataTransfer.files);
         }}
       >
-        <div className="dropzone__icon"><Icon name="upload" size={21} /></div>
-        <p className="dropzone__title">Drop photos here</p>
-        <p className="dropzone__hint">or click to browse · JPG, PNG, WebP, HEIC, RAW/DNG</p>
+        <div className="drop-hero__illustration">
+          <svg width="90" height="74" viewBox="0 0 100 84" fill="none">
+            {/* Back photo card */}
+            <g transform="rotate(-8 35 45)">
+              <rect x="15" y="12" width="54" height="44" rx="6" fill="#cbd5e1" stroke="#94a3b8" strokeWidth="1.5" />
+              <rect x="18" y="15" width="48" height="38" rx="4" fill="#93c5fd" />
+              <circle cx="27" cy="24" r="4.5" fill="#fde047" />
+              <path d="M18 45L29 34L39 43L46 37L66 53H18V45Z" fill="#3b82f6" />
+            </g>
+            {/* Front photo card */}
+            <g transform="rotate(7 55 45)">
+              <rect x="34" y="16" width="56" height="46" rx="6" fill="#f8fafc" stroke="#e2e8f0" strokeWidth="2" style={{ filter: "drop-shadow(0 8px 16px rgba(0,0,0,0.4))" }} />
+              <rect x="38" y="20" width="48" height="38" rx="4" fill="#60a5fa" />
+              <circle cx="74" cy="30" r="5" fill="#fbbf24" />
+              <path d="M38 52L52 38L65 49L72 43L86 58H38V52Z" fill="#1d4ed8" />
+            </g>
+          </svg>
+        </div>
+        <h2 className="drop-hero__title">Drop photos here</h2>
+        <p className="drop-hero__hint">or click to browse · JPG, PNG, WebP, HEIC, RAW/DNG</p>
+        <div className="drop-hero__buttons">
+          <button className="btn btn--primary drop-hero__btn" onClick={() => inputRef.current?.click()}>
+            <Icon name="upload" size={16} /> Browse Photos
+          </button>
+          <button className="btn btn--ghost drop-hero__btn" onClick={() => folderInputRef.current?.click()}>
+            <Icon name="folder" size={16} /> Open Folder
+          </button>
+        </div>
         <input
           ref={inputRef}
           type="file"
@@ -85,27 +68,20 @@ export function UploadTray({ files, selected, onFiles, onSelect, onRemove }) {
             e.target.value = "";
           }}
         />
-      </div>}
-
-      {expanded && files.length > 0 && (
-        <>
-          <div className="tray__meta">
-            <span>{files.length} photo{files.length > 1 ? "s" : ""}</span>
-          </div>
-          <div className="thumb-grid">
-            {files.map((file, i) => (
-              <Thumb
-                key={`${file.name}-${i}`}
-                file={file}
-                index={i}
-                active={i === selected}
-                onSelect={onSelect}
-                onRemove={onRemove}
-              />
-            ))}
-          </div>
-        </>
-      )}
+        <input
+          ref={folderInputRef}
+          type="file"
+          accept={ACCEPT}
+          multiple
+          hidden
+          webkitdirectory=""
+          directory=""
+          onChange={(e) => {
+            addFiles(e.target.files);
+            e.target.value = "";
+          }}
+        />
+      </div>
     </div>
   );
 }

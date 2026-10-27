@@ -92,6 +92,8 @@ uniform float u_grain;
 uniform float u_clarity;
 uniform float u_sharpness;
 uniform float u_autoEnhance;
+uniform float u_removeNoise;
+uniform float u_autoColorFix;
 uniform vec2 u_resolution;
 uniform float u_time;
 
@@ -103,6 +105,34 @@ void main() {
     vec4 srcColor = texture2D(u_image, v_texCoord);
     vec3 rgb = srcColor.rgb;
     vec2 px = 1.0 / u_resolution;
+
+    // A. Auto Color Fix (White Balance & Chromatic Neutralization)
+    if (u_autoColorFix > 0.0) {
+        float luma = dot(rgb, vec3(0.299, 0.587, 0.114));
+        vec3 balanced = rgb + (vec3(luma) - rgb) * 0.22;
+        balanced = clamp((balanced - 0.03) * 1.06, 0.0, 1.0);
+        rgb = mix(rgb, balanced, u_autoColorFix);
+    }
+
+    // B. Remove Noise (Bilateral edge-preserving smoothing)
+    if (u_removeNoise > 0.0) {
+        vec3 center = rgb;
+        vec3 accum = center;
+        float totalW = 1.0;
+        vec2 off[4];
+        off[0] = vec2(px.x * 1.5, 0.0);
+        off[1] = vec2(-px.x * 1.5, 0.0);
+        off[2] = vec2(0.0, px.y * 1.5);
+        off[3] = vec2(0.0, -px.y * 1.5);
+        for (int i = 0; i < 4; i++) {
+            vec3 s = texture2D(u_image, v_texCoord + off[i]).rgb;
+            float diff = length(s - center);
+            float weight = exp(-diff * diff * 32.0);
+            accum += s * weight;
+            totalW += weight;
+        }
+        rgb = mix(rgb, accum / totalW, u_removeNoise);
+    }
 
     // 0. Auto Quality Boost / Smart Pro Enhancement
     if (u_autoEnhance > 0.0) {
@@ -261,6 +291,8 @@ class WebGLRenderer {
       u_clarity: gl.getUniformLocation(program, "u_clarity"),
       u_sharpness: gl.getUniformLocation(program, "u_sharpness"),
       u_autoEnhance: gl.getUniformLocation(program, "u_autoEnhance"),
+      u_removeNoise: gl.getUniformLocation(program, "u_removeNoise"),
+      u_autoColorFix: gl.getUniformLocation(program, "u_autoColorFix"),
       u_resolution: gl.getUniformLocation(program, "u_resolution"),
       u_time: gl.getUniformLocation(program, "u_time"),
     };
@@ -273,7 +305,17 @@ class WebGLRenderer {
     this.initialized = true;
   }
 
-  render(photo, width, height, adj, autoEnhance = false, enhanceStrength = 70) {
+  render(
+    photo,
+    width,
+    height,
+    adj,
+    autoEnhance = false,
+    enhanceStrength = 70,
+    removeNoise = false,
+    denoiseStrength = 50,
+    autoColorFix = false
+  ) {
     if (!this.initialized || !this.gl) return null;
     const gl = this.gl;
 
@@ -338,6 +380,11 @@ class WebGLRenderer {
       this.uniforms.u_autoEnhance,
       autoEnhance ? Math.max(0, Math.min(1, Number(enhanceStrength) / 100.0)) : 0.0
     );
+    gl.uniform1f(
+      this.uniforms.u_removeNoise,
+      removeNoise ? Math.max(0, Math.min(1, Number(denoiseStrength ?? 50) / 100.0)) : 0.0
+    );
+    gl.uniform1f(this.uniforms.u_autoColorFix, autoColorFix ? 1.0 : 0.0);
     gl.uniform2f(this.uniforms.u_resolution, width, height);
     gl.uniform1f(this.uniforms.u_time, (Date.now() % 10000) / 1000.0);
 
@@ -439,7 +486,10 @@ export function renderAdjustedPhoto(
   height,
   adj,
   autoEnhance = false,
-  enhanceStrength = 70
+  enhanceStrength = 70,
+  removeNoise = false,
+  denoiseStrength = 50,
+  autoColorFix = false
 ) {
   if (!glRendererInstance) {
     try {
@@ -451,7 +501,17 @@ export function renderAdjustedPhoto(
 
   if (glRendererInstance && glRendererInstance.initialized) {
     try {
-      const res = glRendererInstance.render(photo, width, height, adj, autoEnhance, enhanceStrength);
+      const res = glRendererInstance.render(
+        photo,
+        width,
+        height,
+        adj,
+        autoEnhance,
+        enhanceStrength,
+        removeNoise,
+        denoiseStrength,
+        autoColorFix
+      );
       if (res) return res;
     } catch (err) {
       console.warn("WebGL render failed, falling back to 2D canvas:", err);

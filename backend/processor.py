@@ -177,16 +177,46 @@ def _apply_auto_enhance(bgr: np.ndarray, strength: float = 70.0) -> np.ndarray:
     return cv2.cvtColor(enhanced_lab, cv2.COLOR_LAB2BGR)
 
 
+def _apply_denoise(bgr: np.ndarray, strength: float = 50.0) -> np.ndarray:
+    factor = max(0.1, min(1.0, float(strength) / 100.0))
+    d = int(5 + 4 * factor)
+    sigma_color = int(25 + 45 * factor)
+    sigma_space = int(25 + 45 * factor)
+    return cv2.bilateralFilter(bgr, d=d, sigmaColor=sigma_color, sigmaSpace=sigma_space)
+
+
+def _apply_auto_color_fix(bgr: np.ndarray) -> np.ndarray:
+    b, g, r = cv2.split(bgr.astype(np.float32))
+    b_mean = float(np.mean(b))
+    g_mean = float(np.mean(g))
+    r_mean = float(np.mean(r))
+    k = (b_mean + g_mean + r_mean) / 3.0
+    if b_mean > 0 and g_mean > 0 and r_mean > 0:
+        b = np.clip(b * (k / b_mean), 0, 255)
+        g = np.clip(g * (k / g_mean), 0, 255)
+        r = np.clip(r * (k / r_mean), 0, 255)
+    return cv2.merge([b, g, r]).astype(np.uint8)
+
+
 def apply_lightroom_adjustments(
     image: Image.Image,
     adj: dict[str, float],
     use_gpu: bool = False,
     auto_enhance: bool = False,
     enhance_strength: float = 70.0,
+    remove_noise: bool = False,
+    denoise_strength: float = 50.0,
+    auto_color_fix: bool = False,
 ) -> Image.Image:
     bgr = cv2.cvtColor(np.asarray(image.convert("RGB")), cv2.COLOR_RGB2BGR)
     h, w, _ = bgr.shape
     cv2.ocl.setUseOpenCL(use_gpu)
+
+    if remove_noise:
+        bgr = _apply_denoise(bgr, denoise_strength)
+
+    if auto_color_fix:
+        bgr = _apply_auto_color_fix(bgr)
 
     if auto_enhance:
         bgr = _apply_auto_enhance(bgr, enhance_strength)
@@ -250,12 +280,18 @@ def process_image(
         adjustments = preset.get("adjustments", {})
         auto_enhance = bool(preset.get("auto_enhance", False))
         enhance_strength = float(preset.get("enhance_strength", 70.0))
+        remove_noise = bool(preset.get("remove_noise", False))
+        denoise_strength = float(preset.get("denoise_strength", 50.0))
+        auto_color_fix = bool(preset.get("auto_color_fix", False))
         image = apply_lightroom_adjustments(
             image,
             adjustments,
             use_gpu=use_gpu,
             auto_enhance=auto_enhance,
             enhance_strength=enhance_strength,
+            remove_noise=remove_noise,
+            denoise_strength=denoise_strength,
+            auto_color_fix=auto_color_fix,
         )
 
 

@@ -90,6 +90,9 @@ class Preset(BaseModel):
     logo_position_y: float | None = None
     auto_enhance: bool = False
     enhance_strength: int = 70
+    remove_noise: bool = False
+    denoise_strength: int = 50
+    auto_color_fix: bool = False
     adjustments: dict[str, float] = Field(default_factory=lambda: dict(DEFAULT_ADJUSTMENTS))
 
 

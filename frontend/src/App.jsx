@@ -25,6 +25,9 @@ const INITIAL_PRESET = {
   logo_position_y: null,
   auto_enhance: false,
   enhance_strength: 70,
+  remove_noise: false,
+  denoise_strength: 50,
+  auto_color_fix: false,
   adjustments: {
     exposure: 0,
     contrast: 0,
@@ -62,6 +65,12 @@ export default function App() {
   const [composerTab, setComposerTab] = useState("compose");
   const [composerVideo, setComposerVideo] = useState(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterView, setFilterView] = useState("all"); // all | favorites | edited | trash
+  const [viewMode, setViewMode] = useState("grid"); // grid | list
+  const [sortBy, setSortBy] = useState("date");
+  const [fabOpen, setFabOpen] = useState(false);
   const toasts = useToasts();
   const pollRef = useRef(null);
 
@@ -220,9 +229,16 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
   };
 
   const removeFile = (index) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    setFiles((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      setSelected((s) => {
+        if (next.length === 0) return 0;
+        if (index < s) return s - 1;
+        return Math.min(s, next.length - 1);
+      });
+      return next;
+    });
     setFilePresets((prev) => prev.filter((_, i) => i !== index));
-    setSelected((s) => (index < s ? s - 1 : Math.min(s, files.length - 2)));
   };
 
   // Instant preset loading
@@ -237,8 +253,6 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
         offset_y: active.offset_y,
         logo_position_x: active.logo_position_x,
         logo_position_y: active.logo_position_y,
-        auto_enhance: active.auto_enhance,
-        enhance_strength: active.enhance_strength,
       } : {};
       const nextPreset = {
         ...INITIAL_PRESET,
@@ -332,208 +346,359 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
     setSettingsOpen(false);
   };
 
+  const fileInputRef = useRef(null);
+
+  // --- Sidebar nav items ---
+  const sidebarNav = [
+    { id: "photos", icon: "brand", label: "Photos Studio", onClick: () => setAppMode("photos") },
+    { id: "videos", icon: "film", label: "Video Studio", onClick: () => setAppMode("videos") },
+    { id: "curate", icon: "sparkle", label: "AI Curate", badge: "New", onClick: () => { setCurationOpen(true); } },
+    { id: "composer", icon: "edit", label: "Post Composer", onClick: () => openComposer() },
+    { id: "drafts", icon: "layers", label: "Drafts", onClick: () => openComposer("drafts") },
+    { id: "pages", icon: "folder", label: "Connected Pages", onClick: () => openComposer("pages") },
+    { id: "history", icon: "clock", label: "Publish History", onClick: () => openComposer("history") },
+  ];
+
+  const activeNav = appMode === "videos" ? "videos" : "photos";
+
   return (
     <div className="app">
-      <header className="topbar">
-        <div className="brand">
-          <span className="brand__mark"><Icon name="brand" size={19} /></span>
-          <div>
-            <h1 className="brand__name">PhotoPilot</h1>
-            <p className="brand__tag">Lightroom-grade photo studio · local & fast</p>
-          </div>
+      {/* ===== LEFT SIDEBAR ===== */}
+      <aside className={`sidebar ${sidebarCollapsed ? "sidebar--collapsed" : ""}`}>
+        <div className="sidebar__brand">
+          <span className="sidebar__brand-mark"><Icon name="brand" size={20} /></span>
+          {!sidebarCollapsed && (
+            <div className="sidebar__brand-text">
+              <span className="sidebar__brand-name">PhotoPilot</span>
+              <span className="sidebar__brand-tag">Local · Fast · Smart</span>
+            </div>
+          )}
         </div>
 
-        {/* Studio Mode Switcher */}
-        <div className="topbar__mode-switch">
-          <button
-            className={`topbar__mode-tab ${appMode === "photos" ? "topbar__mode-tab--active" : ""}`}
-            onClick={() => setAppMode("photos")}
-            title="Batch photo editing, raw presets & watermark"
-          >
-            <span>📷</span>
-            <span>Photos Studio</span>
-          </button>
-          <button
-            className={`topbar__mode-tab ${appMode === "videos" ? "topbar__mode-tab--active" : ""}`}
-            onClick={() => setAppMode("videos")}
-            title="Concat-powered video editing"
-          >
-            <Icon name="film" size={15} />
-            <span>Video Studio</span>
-          </button>
-        </div>
-
-        <div className="topbar__actions">
-          {/* Hardware acceleration / GPU & CPU Selector */}
-          <div className={`device-select-wrapper ${isGpuActive ? "device-select-wrapper--gpu" : ""}`}>
-            <span className="device-select__icon">{isGpuActive ? "GPU" : "CPU"}</span>
-            <select
-              className="device-select"
-              value={deviceMode}
-              onChange={(e) => setDeviceMode(e.target.value)}
-              title={gpu?.details || "Hardware device preference"}
-            >
-              <option value="auto">
-                Auto {gpu?.available ? `(GPU: ${gpu.device})` : "(CPU)"}
-              </option>
-              <option value="gpu" disabled={!gpu?.available}>
-                GPU {gpu?.available ? `(${gpu.device})` : "(Not Available)"}
-              </option>
-              <option value="cpu">CPU (Standard)</option>
-            </select>
-          </div>
-
-          {/* AI Curation & Duplicate Detector */}
-          <button
-            className="btn btn--primary btn--sm"
-            onClick={() => setCurationOpen(true)}
-            title="AI Photo Curation: Detect duplicates, find best shots, and cluster similar photos"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            <Icon name="sparkle" size={15} />
-            <span>AI Curate</span>
-          </button>
-
-          {/* Post Composer */}
-          <button
-            className="btn btn--primary btn--sm"
-            onClick={() => openComposer()}
-            title="Post Composer: Create captions, hashtags & publish to Facebook Pages"
-            style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}
-          >
-            <Icon name="edit" size={15} />
-            <span>Post Composer</span>
-          </button>
-
-          <button
-            className="icon-btn"
-            onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
-            aria-label="Toggle theme"
-          >
-            <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
-          </button>
-          <div className="settings-menu-wrap">
+        <nav className="sidebar__nav">
+          {sidebarNav.map((item) => (
             <button
-             className={`icon-btn ${settingsOpen ? "icon-btn--active" : ""}`}
-             onClick={() => setSettingsOpen((value) => !value)}
-             aria-label="Open workspace settings"
-             title="Workspace settings"
+              key={item.id}
+              className={`sidebar__nav-item ${activeNav === item.id ? "sidebar__nav-item--active" : ""}`}
+              onClick={item.onClick}
+              title={item.label}
             >
-             <Icon name="settings" size={17} />
+              <Icon name={item.icon} size={18} />
+              {!sidebarCollapsed && <span>{item.label}</span>}
+              {!sidebarCollapsed && item.badge && <span className="sidebar__nav-badge">{item.badge}</span>}
             </button>
-            {settingsOpen && (
-             <div className="settings-menu">
-               <div className="settings-menu__title">Workspace</div>
-               <button onClick={() => openComposer("drafts")}><Icon name="layers" size={15} /> Drafts</button>
-               <button onClick={() => openComposer("pages")}><Icon name="folder" size={15} /> Connected Pages</button>
-               <button onClick={() => openComposer("history")}><Icon name="clock" size={15} /> Publish history</button>
-             </div>
-            )}
-          </div>
+          ))}
+        </nav>
+
+        <div className="sidebar__bottom">
+          <button
+            className="sidebar__nav-item"
+            onClick={() => setSettingsOpen((v) => !v)}
+            title="Settings"
+          >
+            <Icon name="settings" size={18} />
+            {!sidebarCollapsed && <span>Settings</span>}
+          </button>
         </div>
-      </header>
+      </aside>
 
-      {appMode === "photos" ? (
-        <div className="workspace">
-          <aside className="workspace__left">
-            <UploadTray
-              files={files}
-              selected={selected}
-              onFiles={addFiles}
-              onSelect={setSelected}
-              onRemove={removeFile}
+      {/* ===== MAIN AREA ===== */}
+      <div className="main-area">
+        {/* ===== TOP BAR ===== */}
+        <header className="topbar">
+          <div className="topbar__search">
+            <Icon name="eye" size={15} />
+            <input
+              type="text"
+              className="topbar__search-input"
+              placeholder="Search photos, folders, or filter..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
             />
-          </aside>
+          </div>
 
-          <main className="workspace__center">
-            <CanvasStage
-              file={files[selected]}
-              logo={logo}
-              preset={currentPreset}
-              onUpdate={update}
-            />
-
-            <div className="actionbar">
+          <div className="topbar__filters">
+            {["all", "favorites", "edited", "trash"].map((f) => (
               <button
-                className="btn btn--primary"
-                onClick={process}
-                disabled={busy || !files.length}
+                key={f}
+                className={`topbar__filter-pill ${filterView === f ? "topbar__filter-pill--active" : ""}`}
+                onClick={() => setFilterView(f)}
               >
-                {busy && job
-                  ? `Processing ${job.completed}/${job.total}…`
-                  : `Process ${files.length || ""} photo${files.length === 1 ? "" : "s"}`}
+                {f === "all" && <Icon name="brand" size={13} />}
+                {f === "favorites" && "⭐"}
+                {f === "edited" && <Icon name="edit" size={13} />}
+                {f === "trash" && <Icon name="trash" size={13} />}
+                <span>{f.charAt(0).toUpperCase() + f.slice(1)}{f === "all" ? " Photos" : ""}</span>
+              </button>
+            ))}
+          </div>
+
+          <div className="topbar__center-controls">
+            <div className="topbar__view-toggle">
+              <button
+                className={`topbar__view-btn ${viewMode === "grid" ? "topbar__view-btn--active" : ""}`}
+                onClick={() => setViewMode("grid")}
+                title="Grid view"
+              >
+                <Icon name="brand" size={13} />
               </button>
               <button
-                className="btn btn--ghost"
-                onClick={() => api.openFolder().catch(() => toasts.error("Windows only."))}
+                className={`topbar__view-btn ${viewMode === "list" ? "topbar__view-btn--active" : ""}`}
+                onClick={() => setViewMode("list")}
+                title="List view"
               >
-                Open output folder
+                <Icon name="layers" size={13} />
               </button>
             </div>
 
-            {job && (
-              <section className="progress-card">
-                <div className="progress-card__head">
-                  <span>
-                    {job.status === "complete" ? "Complete" : "Working"} · {job.completed}/{job.total}
-                    {job.device_used && ` · Device: ${job.device_used}`}
-                  </span>
-                </div>
-                <div className="progressbar">
-                  <div
-                    className="progressbar__fill"
-                    style={{ width: `${job.total ? (job.completed / job.total) * 100 : 0}%` }}
-                  />
-                </div>
-                {job.files?.length > 0 && (
-                  <div className="result-links">
-                    {job.files.map((f) => (
-                      <a key={f.url} href={f.url} target="_blank" rel="noreferrer">
-                        {f.name}
-                      </a>
+            <div className="topbar__sort">
+              <span className="topbar__sort-label">Sort:</span>
+              <select className="topbar__sort-select" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <option value="date">Date</option>
+                <option value="name">Name</option>
+                <option value="size">Size</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="topbar__actions">
+            {/* GPU Badge */}
+            <div className={`topbar__gpu-badge ${isGpuActive ? "topbar__gpu-badge--active" : ""}`}>
+              <span className="topbar__gpu-label">{isGpuActive ? "GPU" : "CPU"}</span>
+              <Icon name="sparkle" size={12} />
+              <select
+                className="topbar__gpu-select"
+                value={deviceMode}
+                onChange={(e) => setDeviceMode(e.target.value)}
+                title={gpu?.details || "Hardware device preference"}
+              >
+                <option value="auto">
+                  {gpu?.available ? `${gpu.device}` : "CPU"}
+                </option>
+                <option value="gpu" disabled={!gpu?.available}>
+                  GPU {gpu?.available ? `(${gpu.device})` : "(N/A)"}
+                </option>
+                <option value="cpu">CPU (Standard)</option>
+              </select>
+            </div>
+
+            <button
+              className="icon-btn"
+              onClick={() => setTheme((t) => (t === "dark" ? "light" : "dark"))}
+              aria-label="Toggle theme"
+            >
+              <Icon name={theme === "dark" ? "sun" : "moon"} size={16} />
+            </button>
+
+            <button className="icon-btn" title="Settings" onClick={() => setSettingsOpen((v) => !v)}>
+              <Icon name="settings" size={16} />
+            </button>
+
+            {/* Profile Avatar Placeholder */}
+            <div className="topbar__avatar">
+              <Icon name="brand" size={16} />
+            </div>
+
+            {/* Import Photos Button */}
+            <button
+              className="topbar__import-btn"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Icon name="plus" size={15} />
+              <span>Import Photos</span>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.dng,image/jpeg,image/png,image/webp,image/heic,image/heif,image/x-adobe-dng"
+              multiple
+              hidden
+              onChange={(e) => {
+                const incoming = [...e.target.files].filter((f) => f && f.name);
+                if (incoming.length) addFiles(incoming);
+                e.target.value = "";
+              }}
+            />
+          </div>
+        </header>
+
+        {/* ===== CONTENT ===== */}
+        {appMode === "photos" ? (
+          <div className="workspace">
+            <main className="workspace__center">
+              {files[selected] ? (
+                <CanvasStage
+                  file={files[selected]}
+                  logo={logo}
+                  preset={currentPreset}
+                  onUpdate={update}
+                />
+              ) : (
+                <UploadTray
+                  files={files}
+                  selected={selected}
+                  onFiles={addFiles}
+                  onSelect={setSelected}
+                  onRemove={removeFile}
+                />
+              )}
+
+              {/* Horizontal Thumbnail Strip */}
+              {files.length > 0 ? (
+                <div className="thumb-strip">
+                  <div className="thumb-strip__scroll">
+                    {files.map((file, i) => (
+                      <ThumbItem
+                        key={`${file.name}-${i}`}
+                        file={file}
+                        index={i}
+                        active={i === selected}
+                        onSelect={setSelected}
+                        onRemove={removeFile}
+                      />
                     ))}
                   </div>
-                )}
-                {job.status === "complete" && job.files?.length > 0 && (
-                  <button
-                    className="btn btn--secondary btn--sm"
-                    onClick={() => openComposer("compose")}
-                  >
-                    <Icon name="edit" size={14} /> Open processed photos in Post Composer
-                  </button>
-                )}
-                {job.errors?.map((e) => (
-                  <p className="progress-card__error" key={e.name}>
-                    {e.name}: {e.error}
-                  </p>
-                ))}
-              </section>
-            )}
-          </main>
+                </div>
+              ) : (
+                <div className="thumb-strip thumb-strip--samples">
+                  <div className="thumb-strip__scroll">
+                    {[
+                      { title: "Coastal Horizon", bg: "linear-gradient(135deg, #1e3a8a 0%, #38bdf8 100%)" },
+                      { title: "Ancient Temple", bg: "linear-gradient(135deg, #78350f 0%, #d97706 100%)" },
+                      { title: "Sunset Ridge", bg: "linear-gradient(135deg, #831843 0%, #f43f5e 50%, #fb923c 100%)" },
+                      { title: "Mystic Valley", bg: "linear-gradient(135deg, #064e3b 0%, #10b981 100%)" },
+                      { title: "Alpine Peaks", bg: "linear-gradient(135deg, #1e293b 0%, #64748b 100%)" },
+                      { title: "Emerald Bay", bg: "linear-gradient(135deg, #134e4a 0%, #2dd4bf 100%)" },
+                      { title: "Golden Bloom", bg: "linear-gradient(135deg, #713f12 0%, #eab308 100%)" },
+                    ].map((sample, idx) => (
+                      <div key={idx} className="thumb-strip__item thumb-strip__item--sample" title={`Sample: ${sample.title}`}>
+                        <div className="thumb-strip__sample-bg" style={{ background: sample.bg }} />
+                        <span className="thumb-strip__sample-lbl">{sample.title}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
-          <aside className="workspace__right">
-            <ControlPanel
-              preset={currentPreset}
-              onUpdate={update}
-              onAdjust={adjust}
-              onApplyToAll={applyAdjustmentGroupToAll}
-              logo={logo}
-              onLogo={setLogo}
-              presets={presets}
-              onLoadPreset={handleLoadPreset}
-              onSavePreset={saveThePreset}
-              onDeletePreset={deleteThePreset}
-              onImportPreset={handleImportPreset}
-              canUndo={historyIndex > 0}
-              canRedo={historyIndex < history.length - 1}
-              onUndo={undo}
-              onRedo={redo}
-            />
-          </aside>
-        </div>
-      ) : (
-        <ConcatVideoStudio notify={(msg, tone) => toasts.show(msg, tone)} />
-      )}
+              {/* Action Bar */}
+              {files.length > 0 && (
+                <div className="actionbar">
+                  <button
+                    className="btn btn--primary"
+                    onClick={process}
+                    disabled={busy || !files.length}
+                  >
+                    {busy && job
+                      ? `Processing ${job.completed}/${job.total}…`
+                      : `Process ${files.length || ""} photo${files.length === 1 ? "" : "s"}`}
+                  </button>
+                  <button
+                    className="btn btn--ghost"
+                    onClick={() => api.openFolder().catch(() => toasts.error("Windows only."))}
+                  >
+                    Open output folder
+                  </button>
+                </div>
+              )}
+
+              {job && (
+                <section className="progress-card">
+                  <div className="progress-card__head">
+                    <span>
+                      {job.status === "complete" ? "Complete" : "Working"} · {job.completed}/{job.total}
+                      {job.device_used && ` · Device: ${job.device_used}`}
+                    </span>
+                  </div>
+                  <div className="progressbar">
+                    <div
+                      className="progressbar__fill"
+                      style={{ width: `${job.total ? (job.completed / job.total) * 100 : 0}%` }}
+                    />
+                  </div>
+                  {job.files?.length > 0 && (
+                    <div className="result-links">
+                      {job.files.map((f) => (
+                        <a key={f.url} href={f.url} target="_blank" rel="noreferrer">
+                          {f.name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                  {job.status === "complete" && job.files?.length > 0 && (
+                    <button
+                      className="btn btn--secondary btn--sm"
+                      onClick={() => openComposer("compose")}
+                    >
+                      <Icon name="edit" size={14} /> Open processed photos in Post Composer
+                    </button>
+                  )}
+                  {job.errors?.map((e) => (
+                    <p className="progress-card__error" key={e.name}>
+                      {e.name}: {e.error}
+                    </p>
+                  ))}
+                </section>
+              )}
+            </main>
+
+            {/* ===== RIGHT SIDEBAR ===== */}
+            <aside className="workspace__right">
+              <ControlPanel
+                preset={currentPreset}
+                onUpdate={update}
+                onAdjust={adjust}
+                onApplyToAll={applyAdjustmentGroupToAll}
+                logo={logo}
+                onLogo={setLogo}
+                presets={presets}
+                onLoadPreset={handleLoadPreset}
+                onSavePreset={saveThePreset}
+                onDeletePreset={deleteThePreset}
+                onImportPreset={handleImportPreset}
+                canUndo={historyIndex > 0}
+                canRedo={historyIndex < history.length - 1}
+                onUndo={undo}
+                onRedo={redo}
+              />
+            </aside>
+          </div>
+        ) : (
+          <ConcatVideoStudio notify={(msg, tone) => toasts.show(msg, tone)} />
+        )}
+      </div>
+
+      {/* ===== FAB MENU ===== */}
+      <div className="fab-container">
+        <button className={`fab ${fabOpen ? "fab--open" : ""}`} onClick={() => setFabOpen((v) => !v)}>
+          <Icon name="plus" size={22} />
+        </button>
+        {fabOpen && (
+          <div className="fab-menu" onClick={() => setFabOpen(false)}>
+            <button onClick={() => fileInputRef.current?.click()}>
+              <Icon name="upload" size={16} /> Import Photos
+            </button>
+            <button onClick={() => setCurationOpen(true)}>
+              <Icon name="sparkle" size={16} /> AI Curate
+            </button>
+            <button onClick={() => openComposer()}>
+              <Icon name="edit" size={16} /> Post Composer
+            </button>
+            <button onClick={() => openComposer("drafts")}>
+              <Icon name="layers" size={16} /> Drafts
+            </button>
+            <button onClick={() => openComposer("pages")}>
+              <Icon name="folder" size={16} /> Connected Pages
+            </button>
+            <button onClick={() => openComposer("history")}>
+              <Icon name="clock" size={16} /> Publish History
+            </button>
+            <div className="fab-menu__divider" />
+            <button onClick={() => setSettingsOpen((v) => !v)}>
+              <Icon name="settings" size={16} /> Settings
+            </button>
+          </div>
+        )}
+      </div>
 
       <Toasts toasts={toasts.toasts} onDismiss={toasts.dismiss} />
 
@@ -554,6 +719,32 @@ const LOGO_AND_GLOBAL_KEYS = new Set([
         initialTab={composerTab}
         initialVideo={composerVideo}
       />
+    </div>
+  );
+}
+
+// Inline thumbnail component for the horizontal strip
+function ThumbItem({ file, active, index, onSelect, onRemove }) {
+  const [url, setUrl] = useState("");
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
+  const isImage = /\.(jpe?g|png|webp)$/i.test(file.name);
+  return (
+    <div className={`thumb-strip__item ${active ? "thumb-strip__item--active" : ""}`} onClick={() => onSelect(index)} title={file.name}>
+      {isImage ? <img src={url} alt={file.name} loading="lazy" /> : <div className="thumb-strip__raw">RAW</div>}
+      <button
+        className="thumb-strip__remove"
+        onClick={(e) => {
+          e.stopPropagation();
+          onRemove(index);
+        }}
+        aria-label={`Remove ${file.name}`}
+      >
+        ×
+      </button>
     </div>
   );
 }
